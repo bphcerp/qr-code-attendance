@@ -1,0 +1,298 @@
+@import 'tailwindcss';
+
+/* Ported from su-connect/src/index.css -- same four BITS-seal palettes, same
+   data-theme mechanism, so the two apps read as siblings. One deliberate
+   change: --text-l is defined here. SU Connect uses it in ~15 places in
+   App.css but never declares it, so those rules silently fall back to
+   inherited color. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:not(:disabled) {
+  transition: transform 0.1s ease-out;
+}
+
+button:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+:root {
+  --text: oklch(48% 0.008 40);
+  --text-h: oklch(19% 0.01 40);
+  --text-l: oklch(62% 0.008 40);
+  --bg: oklch(98% 0.004 40);
+  --surface: oklch(100% 0 0);
+  --border: oklch(90% 0.006 40);
+  --code-bg: oklch(98% 0.004 40);
+  --accent: oklch(48% 0.19 18);
+  --accent-bg: oklch(93% 0.035 18);
+  --accent-border: oklch(48% 0.19 18 / 0.5);
+  --status-submitted: oklch(60% 0.16 65);
+  --status-review: oklch(56% 0.16 255);
+  --status-resolved: oklch(50% 0.14 150);
+  --status-closed: oklch(52% 0.01 30);
+  --status-approved: #16a34a;
+  --status-rejected: #dc2626;
+  --shadow:
+    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+
+  --sans: var(--font-manrope), system-ui, sans-serif;
+  --heading: var(--font-montserrat), system-ui, sans-serif;
+  --mono: var(--font-plex-mono), ui-monospace, Consolas, monospace;
+
+  --radius: 10px;
+
+  font: 18px/145% var(--sans);
+  letter-spacing: 0.18px;
+  color-scheme: light;
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  @media (max-width: 1024px) {
+    font-size: 16px;
+  }
+}
+
+:root[data-theme$='-dark'] {
+  --shadow:
+    rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+  color-scheme: dark;
+}
+
+:root[data-theme='crimson-dark'] {
+  --accent: oklch(68% 0.17 18);
+  --accent-bg: oklch(30% 0.07 18);
+  --accent-border: oklch(68% 0.17 18 / 0.5);
+  --text-h: oklch(95% 0.004 40);
+  --text: oklch(70% 0.008 40);
+  --text-l: oklch(58% 0.008 40);
+  --bg: oklch(19% 0.006 40);
+  --border: oklch(31% 0.008 40);
+  --surface: oklch(24% 0.008 40);
+  --code-bg: oklch(19% 0.006 40);
+}
+
+:root[data-theme='navy-light'] {
+  --accent: oklch(34% 0.15 265);
+  --accent-bg: oklch(92% 0.035 265);
+  --accent-border: oklch(34% 0.15 265 / 0.5);
+  --text-h: oklch(19% 0.01 265);
+  --text: oklch(48% 0.01 265);
+  --text-l: oklch(62% 0.01 265);
+  --bg: oklch(98% 0.004 265);
+  --border: oklch(90% 0.01 265);
+  --surface: oklch(100% 0 0);
+  --code-bg: oklch(98% 0.004 265);
+}
+
+:root[data-theme='navy-dark'] {
+  --accent: oklch(65% 0.14 265);
+  --accent-bg: oklch(28% 0.07 265);
+  --accent-border: oklch(65% 0.14 265 / 0.5);
+  --text-h: oklch(95% 0.005 265);
+  --text: oklch(70% 0.012 265);
+  --text-l: oklch(58% 0.012 265);
+  --bg: oklch(19% 0.012 265);
+  --border: oklch(30% 0.012 265);
+  --surface: oklch(24% 0.014 265);
+  --code-bg: oklch(19% 0.012 265);
+}
+
+:root[data-theme='amber-light'] {
+  --accent: oklch(52% 0.17 55);
+  --accent-bg: oklch(93% 0.05 60);
+  --accent-border: oklch(52% 0.17 55 / 0.5);
+  --text-h: oklch(20% 0.015 50);
+  --text: oklch(48% 0.012 50);
+  --text-l: oklch(62% 0.012 50);
+  --bg: oklch(98% 0.008 60);
+  --border: oklch(90% 0.012 55);
+  --surface: oklch(100% 0 0);
+  --code-bg: oklch(98% 0.008 60);
+}
+
+:root[data-theme='amber-dark'] {
+  --accent: oklch(73% 0.16 60);
+  --accent-bg: oklch(30% 0.07 60);
+  --accent-border: oklch(73% 0.16 60 / 0.5);
+  --text-h: oklch(95% 0.006 50);
+  --text: oklch(70% 0.012 50);
+  --text-l: oklch(58% 0.012 50);
+  --bg: oklch(19% 0.01 50);
+  --border: oklch(31% 0.012 50);
+  --surface: oklch(24% 0.012 50);
+  --code-bg: oklch(19% 0.01 50);
+}
+
+:root[data-theme='sky-light'] {
+  --accent: oklch(58% 0.13 230);
+  --accent-bg: oklch(92% 0.04 230);
+  --accent-border: oklch(58% 0.13 230 / 0.5);
+  --text-h: oklch(19% 0.012 230);
+  --text: oklch(48% 0.01 230);
+  --text-l: oklch(62% 0.01 230);
+  --bg: oklch(98% 0.006 230);
+  --border: oklch(90% 0.01 230);
+  --surface: oklch(100% 0 0);
+  --code-bg: oklch(98% 0.006 230);
+}
+
+:root[data-theme='sky-dark'] {
+  --accent: oklch(72% 0.13 230);
+  --accent-bg: oklch(29% 0.07 230);
+  --accent-border: oklch(72% 0.13 230 / 0.5);
+  --text-h: oklch(95% 0.005 230);
+  --text: oklch(70% 0.012 230);
+  --text-l: oklch(58% 0.012 230);
+  --bg: oklch(19% 0.012 230);
+  --border: oklch(30% 0.012 230);
+  --surface: oklch(24% 0.014 230);
+  --code-bg: oklch(19% 0.012 230);
+}
+
+/* Attendance states reuse the existing status ramp rather than adding new hues,
+   so a "Present" chip here reads the same as a "Resolved" chip in SU Connect. */
+:root {
+  --status-present: var(--status-resolved);
+  --status-absent: var(--status-rejected);
+  --status-flagged: var(--status-submitted);
+  --status-pending: var(--status-review);
+}
+
+/* shadcn reads these through Tailwind utilities (bg-primary, text-muted-foreground,
+   ...), so the mapping happens here instead of duplicating color values. Note
+   shadcn's `accent` means "subtle hover fill", which is our --accent-bg -- our
+   brand --accent maps to its `primary`. */
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--text-h);
+  --color-popover: var(--surface);
+  --color-popover-foreground: var(--text-h);
+  --color-primary: var(--accent);
+  --color-primary-foreground: #fff;
+  --color-secondary: var(--accent-bg);
+  --color-secondary-foreground: var(--text-h);
+  --color-muted: var(--code-bg);
+  --color-muted-foreground: var(--text-l);
+  --color-accent: var(--accent-bg);
+  --color-accent-foreground: var(--text-h);
+  --color-destructive: var(--status-rejected);
+  --color-destructive-foreground: #fff;
+  --color-border: var(--border);
+  --color-input: var(--border);
+  --color-ring: var(--accent);
+
+  --font-sans: var(--sans);
+  --font-heading: var(--heading);
+  --font-mono: var(--mono);
+
+  --radius-sm: 7px;
+  --radius-md: 9px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+}
+
+body {
+  margin: 0;
+  overflow-x: hidden;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
+
+h1,
+h2 {
+  font-family: var(--heading);
+  font-weight: 800;
+  color: var(--text-h);
+}
+
+h1 {
+  font-size: 56px;
+  letter-spacing: -1.68px;
+  margin: 32px 0;
+  @media (max-width: 1024px) {
+    font-size: 36px;
+    margin: 20px 0;
+  }
+}
+
+h2 {
+  font-size: 24px;
+  line-height: 118%;
+  letter-spacing: -0.24px;
+  margin: 0 0 8px;
+  @media (max-width: 1024px) {
+    font-size: 20px;
+  }
+}
+
+p {
+  margin: 0;
+}
+
+/* Everything in this file is unlayered, so it outranks every Tailwind utility
+   no matter the specificity -- `text-[32px]` on an <h1> silently loses to the
+   rule above. Compact headings therefore get a class here rather than a
+   utility override at the call site. */
+.page-title {
+  font-family: var(--heading);
+  font-weight: 800;
+  color: var(--text-h);
+  font-size: 32px;
+  letter-spacing: -0.96px;
+  margin: 0;
+
+  @media (max-width: 1024px) {
+    font-size: 26px;
+    letter-spacing: -0.78px;
+  }
+}
+
+.meta {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-l);
+}
+
+code,
+.counter {
+  font-family: var(--mono);
+  display: inline-flex;
+  border-radius: 4px;
+  color: var(--text-h);
+}
+
+code {
+  font-size: 15px;
+  line-height: 135%;
+  padding: 4px 8px;
+  background: var(--code-bg);
+}
+
+/* The projector route opts out of theming entirely -- a tinted QR loses contrast
+   ratio, and contrast is what buys scanning distance from the back of an LT. */
+:root[data-display] {
+  color-scheme: light;
+  --bg: #fff;
+  --surface: #fff;
+  --text-h: #000;
+}
