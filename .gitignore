@@ -42,3 +42,6 @@ next-env.d.ts
 
 # local embedded postgres data
 .pgdata/
+
+.vercel
+.env*
