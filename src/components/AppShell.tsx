@@ -7,24 +7,23 @@ import { signOutAndReturnToLogin } from '@/app/actions'
 import ThemeMenu from './ThemeMenu'
 import { Button } from '@/components/ui/button'
 
-const studentNav = [
-  { href: '/', label: 'Home', icon: House },
-  { href: '/scan', label: 'Scan', icon: QrCode },
-]
-
-const facultyNav = [{ href: '/', label: 'Courses', icon: House }]
-
 export default function AppShell({
   name,
   role,
+  enrolled,
   children,
 }: {
   name: string
   role: string
+  enrolled: boolean
   children: React.ReactNode
 }) {
   const pathname = usePathname()
-  const nav = role === 'student' ? studentNav : facultyNav
+
+  // Scan follows enrolment rather than role. Faculty enrolled in a course are
+  // rare but real, and role alone would hide the only screen they need.
+  const nav = [{ href: '/', label: role === 'student' ? 'Home' : 'Courses', icon: House }]
+  if (enrolled) nav.push({ href: '/scan', label: 'Scan', icon: QrCode })
 
   return (
     <>

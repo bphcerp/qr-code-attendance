@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { eq } from 'drizzle-orm'
 import { db } from '@/db'
-import { users } from '@/db/schema'
+import { enrollments, users } from '@/db/schema'
 import { auth } from '@/lib/auth'
 import AppShell from '@/components/AppShell'
 
@@ -18,8 +18,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .where(eq(users.email, email))
   if (!me) redirect('/login')
 
+  const [enrolled] = await db
+    .select({ courseId: enrollments.courseId })
+    .from(enrollments)
+    .where(eq(enrollments.studentEmail, email))
+    .limit(1)
+
   return (
-    <AppShell name={me.name} role={me.role}>
+    <AppShell name={me.name} role={me.role} enrolled={Boolean(enrolled)}>
       {children}
     </AppShell>
   )
