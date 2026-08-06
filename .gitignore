@@ -45,3 +45,7 @@ next-env.d.ts
 
 .vercel
 .env*
+
+# the one env file that is meant to be committed -- it documents what the
+# others must contain and holds no secrets
+!.env.example
