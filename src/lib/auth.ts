@@ -9,9 +9,20 @@ const allowedDomains = (process.env.ALLOWED_EMAIL_DOMAINS ?? '')
   .map((d) => d.trim().toLowerCase())
   .filter(Boolean)
 
+// Individual addresses that get in regardless of domain. This exists so a
+// personal account can be used for testing without adding gmail.com to the
+// list above, which would open sign-in to every Google account alive. Leave it
+// empty in a real deployment -- every address here is a permanent hole.
+const allowedEmails = (process.env.ALLOWED_TEST_EMAILS ?? '')
+  .split(',')
+  .map((e) => e.trim().toLowerCase())
+  .filter(Boolean)
+
 export function isAllowedEmail(email: string | null | undefined) {
   if (!email) return false
-  const domain = email.split('@')[1]?.toLowerCase()
+  const normalized = email.toLowerCase()
+  if (allowedEmails.includes(normalized)) return true
+  const domain = normalized.split('@')[1]
   if (!domain) return false
   return allowedDomains.includes(domain)
 }
@@ -22,7 +33,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // hd only filters the account chooser -- it's a hint to Google, not a
       // guarantee, and a determined user can still complete the flow with any
       // account. The signIn callback below is the actual gate.
-      authorization: { params: { hd: allowedDomains[0], prompt: 'select_account' } },
+      //
+      // It is dropped while ALLOWED_TEST_EMAILS is set, because the same filter
+      // that hides other institutes also hides the test account, leaving it
+      // unselectable no matter what the callback would have allowed.
+      authorization: {
+        params: {
+          ...(allowedEmails.length ? {} : { hd: allowedDomains[0] }),
+          prompt: 'select_account',
+        },
+      },
     }),
   ],
   session: { strategy: 'jwt' },
