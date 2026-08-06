@@ -211,70 +211,72 @@ export default function SessionControl({
             />
           </div>
 
-          <div className="mt-3 rounded-lg border border-border bg-card p-5">
-            <p className="meta">Projector link</p>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Open this on every screen in the room. It locks to the first machine that opens it,
-              so generate it at the podium.
-            </p>
-
-            {displayLink ? (
-              <>
-                <p className="mt-4 rounded-md border border-border bg-muted px-3 py-2.5 font-mono text-xs break-all text-card-foreground">
-                  {displayLink}
-                </p>
-                <div className="mt-3 flex flex-wrap gap-3">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      navigator.clipboard.writeText(displayLink)
-                      setCopied(true)
-                    }}
-                  >
-                    <Copy />
-                    {copied ? 'Copied' : 'Copy link'}
-                  </Button>
-                  <Button asChild>
-                    <a href={displayLink} target="_blank" rel="noreferrer">
-                      <ExternalLink />
-                      Open display
-                    </a>
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <Button className="mt-4" disabled={busy} onClick={generateLink}>
-                Generate projector link
-              </Button>
-            )}
-
-            <button
-              type="button"
-              disabled={busy}
-              onClick={revokeLinks}
-              className="mt-4 block text-sm text-primary underline underline-offset-4"
-            >
-              Revoke every link for this session
-            </button>
-          </div>
-
-          <div className="mt-3 rounded-lg border border-border bg-card p-5">
-            <p className="meta">Flags</p>
-            {stats && stats.flags.some((f) => flagLabels[f.kind]) ? (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {stats.flags
-                  .filter((f) => flagLabels[f.kind])
-                  .map((f) => (
-                    <StatusChip key={f.kind} tone="flagged">
-                      {flagLabels[f.kind]} · {f.count}
-                    </StatusChip>
-                  ))}
-              </div>
-            ) : (
+          <div className="mt-3 grid gap-3 lg:grid-cols-2">
+            <div className="rounded-lg border border-border bg-card p-5">
+              <p className="meta">Projector link</p>
               <p className="mt-2 text-sm text-muted-foreground">
-                Nothing flagged. A flag is a prompt to look, never a verdict on its own.
+                Open this on every screen in the room. It locks to the first machine that opens it,
+                so generate it at the podium.
               </p>
-            )}
+
+              {displayLink ? (
+                <>
+                  <p className="mt-4 rounded-md border border-border bg-muted px-3 py-2.5 font-mono text-xs break-all text-card-foreground">
+                    {displayLink}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-3">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        navigator.clipboard.writeText(displayLink)
+                        setCopied(true)
+                      }}
+                    >
+                      <Copy />
+                      {copied ? 'Copied' : 'Copy link'}
+                    </Button>
+                    <Button asChild>
+                      <a href={displayLink} target="_blank" rel="noreferrer">
+                        <ExternalLink />
+                        Open display
+                      </a>
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <Button className="mt-4" disabled={busy} onClick={generateLink}>
+                  Generate projector link
+                </Button>
+              )}
+
+              <button
+                type="button"
+                disabled={busy}
+                onClick={revokeLinks}
+                className="mt-4 block text-sm text-primary underline underline-offset-4"
+              >
+                Revoke every link for this session
+              </button>
+            </div>
+
+            <div className="rounded-lg border border-border bg-card p-5">
+              <p className="meta">Flags</p>
+              {stats && stats.flags.some((f) => flagLabels[f.kind]) ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {stats.flags
+                    .filter((f) => flagLabels[f.kind])
+                    .map((f) => (
+                      <StatusChip key={f.kind} tone="flagged">
+                        {flagLabels[f.kind]} · {f.count}
+                      </StatusChip>
+                    ))}
+                </div>
+              ) : (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Nothing flagged. A flag is a prompt to look, never a verdict on its own.
+                </p>
+              )}
+            </div>
           </div>
 
           <Button

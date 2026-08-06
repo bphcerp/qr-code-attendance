@@ -74,13 +74,15 @@ export default async function ScanPage({
     )
   }
 
+  // Capped to a phone-width column. The camera preview is square, so letting it
+  // fill a desktop content area would put a one-metre video on the screen.
   return (
-    <>
+    <div className="mx-auto max-w-md">
       <div className="my-8">
         <h1 className="page-title">{target.code}</h1>
         <p className="mt-1 text-muted-foreground">{target.title}</p>
       </div>
       <Scanner sessionId={target.id} courseCode={target.code} courseTitle={target.title} />
-    </>
+    </div>
   )
 }

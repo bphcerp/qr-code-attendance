@@ -91,7 +91,7 @@ async function StudentHome({ email }: { email: string }) {
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {enrolled.map((course) => {
           const total = heldByCourse.get(course.id) ?? 0
           const present = attendedByCourse.get(course.id) ?? 0
@@ -157,7 +157,7 @@ async function FacultyHome({ email }: { email: string }) {
     <>
       <h1 className="page-title my-8">Your courses</h1>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {mine.map((course) => (
           <Link
             key={course.id}

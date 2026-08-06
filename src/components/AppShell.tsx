@@ -28,7 +28,7 @@ export default function AppShell({
   return (
     <>
       <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
-        <div className="mx-auto flex h-14 w-full max-w-5xl items-center gap-1 px-4">
+        <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-1 px-4 sm:h-16 sm:px-6">
           <span className="mr-3 font-[family-name:var(--heading)] text-[17px] font-extrabold tracking-[-0.5px] text-card-foreground">
             Attendance
           </span>
@@ -63,7 +63,7 @@ export default function AppShell({
         </div>
       </header>
 
-      <div className="mx-auto w-full max-w-5xl flex-1 px-4 pb-16">{children}</div>
+      <div className="mx-auto w-full max-w-6xl flex-1 px-4 pb-16 sm:px-6">{children}</div>
     </>
   )
 }
