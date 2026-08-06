@@ -9,7 +9,14 @@ import { users, courses, enrollments, classSessions } from '../src/db/schema'
 // real HTTP -- same reasoning as the other two scripts, which is that both bugs
 // found so far only showed up against a live server and a live database.
 const BASE = process.env.BASE_URL ?? 'http://localhost:3001'
-const COOKIE = 'authjs.session-token'
+
+// Auth.js prefixes the cookie name with __Secure- whenever the app considers
+// the connection secure, which it decides from the request's own protocol --
+// not from BASE_URL. Running this against the https production deploy with
+// the plain name looks exactly like every check failing at once, because the
+// server never sees a cookie it recognises and treats every request as signed
+// out.
+const COOKIE = BASE.startsWith('https://') ? '__Secure-authjs.session-token' : 'authjs.session-token'
 
 let pass = 0
 let fail = 0
