@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers'
-import { and, eq } from 'drizzle-orm'
+import { and, countDistinct, eq, ne } from 'drizzle-orm'
 import { db } from '@/db'
 import { enrollments, attendanceRecords, attendanceFlags } from '@/db/schema'
 import { errorResponse, requireUser, HttpError } from '@/lib/guards'
@@ -89,10 +89,7 @@ export async function POST(req: Request) {
     }
 
     // Soft flags. Nothing below rejects the mark -- these exist so faculty have
-    // something to look at, not to decide anything on their own. Fingerprint
-    // collisions are deliberately absent: whether a shared hash means two phones
-    // or one common Android model depends on how large the cluster grows by the
-    // end of the session, so it's computed when the roster is read, not here.
+    // something to look at, not to decide anything on their own.
     const flags: { kind: string; detail?: Record<string, unknown> }[] = []
 
     if (body.geoDenied) {
@@ -111,6 +108,33 @@ export async function POST(req: Request) {
 
     if (verified.kind === 'code') flags.push({ kind: 'code_entry' })
     if (device.recentlyRebound) flags.push({ kind: 'device_recently_rebound' })
+
+    // A student with no device row yet gets whatever handset is in front of
+    // them, which is the one window where someone signed into a friend's
+    // account can mark them. It cannot be blocked: an honest first-timer is
+    // indistinguishable from that, and blocking would deny the whole cohort
+    // its first lecture. So it is recorded instead, and closes by itself the
+    // moment that student has marked once.
+    if (device.justRegistered) flags.push({ kind: 'device_first_use' })
+
+    // One phone marking two students is the proxy signature -- but UA + screen
+    // + timezone identifies a phone *model*, so two classmates on the same
+    // Redmi collide without doing anything wrong. Hence a flag carrying the
+    // count, never a block. The cluster is only meaningful once the session
+    // ends, so the number here is what it was at this moment, not a verdict.
+    const [shared] = await db
+      .select({ others: countDistinct(attendanceRecords.studentEmail) })
+      .from(attendanceRecords)
+      .where(
+        and(
+          eq(attendanceRecords.sessionId, session.id),
+          eq(attendanceRecords.fingerprint, body.fingerprint),
+          ne(attendanceRecords.studentEmail, email),
+        ),
+      )
+    if (shared?.others) {
+      flags.push({ kind: 'fingerprint_collision', detail: { otherStudentsSoFar: shared.others } })
+    }
 
     if (flags.length) {
       await db.insert(attendanceFlags).values(flags.map((f) => ({ ...f, recordId })))
