@@ -28,7 +28,7 @@ export default function AppShell({
   return (
     <>
       <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
-        <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-1 px-4 sm:h-16 sm:px-6">
+        <div className="mx-auto flex min-h-16 w-full max-w-6xl items-center gap-3 px-4 py-2 sm:min-h-20 sm:px-6">
           <span className="mr-3 font-[family-name:var(--heading)] text-[17px] font-extrabold tracking-[-0.5px] text-card-foreground">
             Attendance
           </span>
@@ -41,8 +41,8 @@ export default function AppShell({
                 href={item.href}
                 className={
                   active
-                    ? 'flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm font-bold text-accent-foreground'
-                    : 'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium hover:bg-accent'
+                    ? 'flex items-center gap-1.5 rounded-md bg-accent px-3.5 py-2 text-sm font-bold text-accent-foreground'
+                    : 'flex items-center gap-1.5 rounded-md px-3.5 py-2 text-sm font-medium hover:bg-accent'
                 }
               >
                 <item.icon size={16} />
@@ -51,7 +51,7 @@ export default function AppShell({
             )
           })}
 
-          <div className="ml-auto flex items-center gap-1">
+          <div className="ml-auto flex items-center gap-2">
             <span className="hidden text-sm text-muted-foreground sm:inline">{name}</span>
             <ThemeMenu />
             <form action={signOutAndReturnToLogin}>
