@@ -273,6 +273,14 @@ p {
   color: var(--text-l);
 }
 
+.meta-lg {
+  font-family: var(--mono);
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-l);
+}
+
 code,
 .counter {
   font-family: var(--mono);

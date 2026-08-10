@@ -48,14 +48,18 @@ export const devices = pgTable(
   ],
 )
 
-export const courses = pgTable('courses', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  code: varchar('code').notNull(),
-  title: varchar('title').notNull(),
-  facultyEmail: varchar('faculty_email')
-    .notNull()
-    .references(() => users.email),
-})
+export const courses = pgTable(
+  'courses',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    code: varchar('code').notNull(),
+    title: varchar('title').notNull(),
+    facultyEmail: varchar('faculty_email')
+      .notNull()
+      .references(() => users.email),
+  },
+  (table) => [index('courses_faculty_email_idx').on(table.facultyEmail)],
+)
 
 export const enrollments = pgTable(
   'enrollments',
@@ -68,7 +72,13 @@ export const enrollments = pgTable(
       .references(() => users.email, { onDelete: 'cascade' }),
     enrolledAt: timestamp('enrolled_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [primaryKey({ columns: [table.courseId, table.studentEmail] })],
+  (table) => [
+    primaryKey({ columns: [table.courseId, table.studentEmail] }),
+    // studentEmail is only the second column of the PK above, so it can't
+    // be used as a leading index -- every student-side query filters on it
+    // alone.
+    index('enrollments_student_email_idx').on(table.studentEmail),
+  ],
 )
 
 export const classSessions = pgTable(

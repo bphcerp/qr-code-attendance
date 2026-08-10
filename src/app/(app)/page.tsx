@@ -2,8 +2,9 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { and, count, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 import { db } from '@/db'
-import { attendanceRecords, classSessions, courses, enrollments, users } from '@/db/schema'
+import { attendanceRecords, classSessions, courses, enrollments } from '@/db/schema'
 import { auth } from '@/lib/auth'
+import { getCurrentUser } from '@/lib/currentUser'
 import StatusChip from '@/components/StatusChip'
 import { Button } from '@/components/ui/button'
 
@@ -14,7 +15,7 @@ export default async function HomePage() {
   const email = session?.user?.email?.toLowerCase()
   if (!email) redirect('/login')
 
-  const [me] = await db.select({ role: users.role }).from(users).where(eq(users.email, email))
+  const me = await getCurrentUser(email)
   if (!me) redirect('/login')
 
   return me.role === 'student' ? <StudentHome email={email} /> : <FacultyHome email={email} />
@@ -41,31 +42,31 @@ async function StudentHome({ email }: { email: string }) {
 
   const ids = enrolled.map((c) => c.id)
 
-  const live = await db
-    .select({ id: classSessions.id, courseId: classSessions.courseId })
-    .from(classSessions)
-    .where(and(inArray(classSessions.courseId, ids), isNull(classSessions.endedAt)))
-
   // Percentages count finished sessions only -- a class that is still running
   // would otherwise read as a miss for everyone who hasn't scanned yet.
-  const held = await db
-    .select({ courseId: classSessions.courseId, n: count() })
-    .from(classSessions)
-    .where(and(inArray(classSessions.courseId, ids), isNotNull(classSessions.endedAt)))
-    .groupBy(classSessions.courseId)
-
-  const attended = await db
-    .select({ courseId: classSessions.courseId, n: count() })
-    .from(attendanceRecords)
-    .innerJoin(classSessions, eq(classSessions.id, attendanceRecords.sessionId))
-    .where(
-      and(
-        eq(attendanceRecords.studentEmail, email),
-        inArray(classSessions.courseId, ids),
-        isNotNull(classSessions.endedAt),
-      ),
-    )
-    .groupBy(classSessions.courseId)
+  const [live, held, attended] = await Promise.all([
+    db
+      .select({ id: classSessions.id, courseId: classSessions.courseId })
+      .from(classSessions)
+      .where(and(inArray(classSessions.courseId, ids), isNull(classSessions.endedAt))),
+    db
+      .select({ courseId: classSessions.courseId, n: count() })
+      .from(classSessions)
+      .where(and(inArray(classSessions.courseId, ids), isNotNull(classSessions.endedAt)))
+      .groupBy(classSessions.courseId),
+    db
+      .select({ courseId: classSessions.courseId, n: count() })
+      .from(attendanceRecords)
+      .innerJoin(classSessions, eq(classSessions.id, attendanceRecords.sessionId))
+      .where(
+        and(
+          eq(attendanceRecords.studentEmail, email),
+          inArray(classSessions.courseId, ids),
+          isNotNull(classSessions.endedAt),
+        ),
+      )
+      .groupBy(classSessions.courseId),
+  ])
 
   const liveByCourse = new Map(live.map((s) => [s.courseId, s.id]))
   const heldByCourse = new Map(held.map((r) => [r.courseId, r.n]))
@@ -91,14 +92,14 @@ async function StudentHome({ email }: { email: string }) {
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {enrolled.map((course) => {
           const total = heldByCourse.get(course.id) ?? 0
           const present = attendedByCourse.get(course.id) ?? 0
           const percent = total ? Math.round((present / total) * 100) : null
 
           return (
-            <div key={course.id} className="rounded-lg border border-border bg-card p-5">
+            <div key={course.id} className="rounded-lg border border-border bg-card p-6">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="font-mono text-sm font-medium text-card-foreground">{course.code}</p>
@@ -139,16 +140,17 @@ async function FacultyHome({ email }: { email: string }) {
 
   const ids = mine.map((c) => c.id)
 
-  const live = await db
-    .select({ id: classSessions.id, courseId: classSessions.courseId })
-    .from(classSessions)
-    .where(and(inArray(classSessions.courseId, ids), isNull(classSessions.endedAt)))
-
-  const roster = await db
-    .select({ courseId: enrollments.courseId, n: count() })
-    .from(enrollments)
-    .where(inArray(enrollments.courseId, ids))
-    .groupBy(enrollments.courseId)
+  const [live, roster] = await Promise.all([
+    db
+      .select({ id: classSessions.id, courseId: classSessions.courseId })
+      .from(classSessions)
+      .where(and(inArray(classSessions.courseId, ids), isNull(classSessions.endedAt))),
+    db
+      .select({ courseId: enrollments.courseId, n: count() })
+      .from(enrollments)
+      .where(inArray(enrollments.courseId, ids))
+      .groupBy(enrollments.courseId),
+  ])
 
   const liveByCourse = new Set(live.map((s) => s.courseId))
   const rosterByCourse = new Map(roster.map((r) => [r.courseId, r.n]))
@@ -157,12 +159,12 @@ async function FacultyHome({ email }: { email: string }) {
     <>
       <h1 className="page-title my-8">Your courses</h1>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {mine.map((course) => (
           <Link
             key={course.id}
             href={`/courses/${course.id}/session`}
-            className="rounded-lg border border-border bg-card p-5 hover:border-primary"
+            className="rounded-lg border border-border bg-card p-6 hover:border-primary"
           >
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -171,7 +173,7 @@ async function FacultyHome({ email }: { email: string }) {
               </div>
               {liveByCourse.has(course.id) && <StatusChip tone="live">Live</StatusChip>}
             </div>
-            <p className="meta mt-4">{rosterByCourse.get(course.id) ?? 0} students enrolled</p>
+            <p className="meta-lg mt-4">{rosterByCourse.get(course.id) ?? 0} students enrolled</p>
           </Link>
         ))}
       </div>
