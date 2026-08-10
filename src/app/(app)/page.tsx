@@ -32,7 +32,9 @@ async function StudentHome({ email }: { email: string }) {
   if (!enrolled.length) {
     return (
       <>
-        <h1 className="page-title my-8">Your courses</h1>
+        <div className="my-8">
+          <h1 className="page-title">Your courses</h1>
+        </div>
         <p className="text-muted-foreground">
           You aren&rsquo;t enrolled in anything yet. Your instructor imports the roster.
         </p>
@@ -74,7 +76,9 @@ async function StudentHome({ email }: { email: string }) {
 
   return (
     <>
-      <h1 className="page-title my-8">Your courses</h1>
+      <div className="my-8">
+        <h1 className="page-title">Your courses</h1>
+      </div>
 
       {live.length > 0 && (
         <div className="mb-6 rounded-lg border border-border bg-card p-5">
@@ -132,7 +136,9 @@ async function FacultyHome({ email }: { email: string }) {
   if (!mine.length) {
     return (
       <>
-        <h1 className="page-title my-8">Your courses</h1>
+        <div className="my-8">
+          <h1 className="page-title">Your courses</h1>
+        </div>
         <p className="text-muted-foreground">No courses are assigned to this account yet.</p>
       </>
     )
@@ -157,7 +163,9 @@ async function FacultyHome({ email }: { email: string }) {
 
   return (
     <>
-      <h1 className="page-title my-8">Your courses</h1>
+      <div className="my-8">
+        <h1 className="page-title">Your courses</h1>
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {mine.map((course) => (

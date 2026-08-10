@@ -44,7 +44,9 @@ export default async function ScanPage({
   if (!live.length) {
     return (
       <>
-        <h1 className="page-title my-8">Scan</h1>
+        <div className="my-8">
+          <h1 className="page-title">Scan</h1>
+        </div>
         <p className="text-muted-foreground">
           None of your classes is taking attendance right now.
         </p>
@@ -57,7 +59,9 @@ export default async function ScanPage({
   if (!target) {
     return (
       <>
-        <h1 className="page-title my-8">Which class?</h1>
+        <div className="my-8">
+          <h1 className="page-title">Which class?</h1>
+        </div>
         <div className="grid gap-3 sm:grid-cols-2">
           {live.map((s) => (
             <Link
