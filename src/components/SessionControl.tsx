@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Copy, ExternalLink, MapPin } from 'lucide-react'
 import StatusChip from './StatusChip'
 import { Button } from '@/components/ui/button'
+import { STATIC_MINUTES_MAX } from '@/lib/token'
 
 type OpenSession = {
   id: string
@@ -46,7 +47,9 @@ export default function SessionControl({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const [qrMode, setQrMode] = useState<'rotating' | 'static'>('rotating')
   const [rotationSeconds, setRotationSeconds] = useState(5)
+  const [staticMinutes, setStaticMinutes] = useState(30)
   const [displayCount, setDisplayCount] = useState(1)
   const [room, setRoom] = useState<{ lat: number; lng: number } | null>(null)
 
@@ -93,7 +96,7 @@ export default function SessionControl({
 
   async function start() {
     const created = await post(`/api/courses/${courseId}/sessions`, 'POST', {
-      rotationSeconds,
+      rotationSeconds: qrMode === 'static' ? staticMinutes * 60 : rotationSeconds,
       declaredDisplayCount: displayCount,
       roomLat: room?.lat ?? null,
       roomLng: room?.lng ?? null,
@@ -151,15 +154,59 @@ export default function SessionControl({
 
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <label className="block">
-              <span className="text-sm text-muted-foreground">QR rotates every (seconds)</span>
-              <input
-                type="number"
-                min={3}
-                max={30}
-                value={rotationSeconds}
-                onChange={(e) => setRotationSeconds(Number(e.target.value))}
-                className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2.5 font-mono text-card-foreground outline-none focus:border-ring"
-              />
+              <span className="text-sm text-muted-foreground">QR mode</span>
+              <div className="mt-1.5 inline-flex rounded-md border border-input p-1">
+                <button
+                  type="button"
+                  onClick={() => setQrMode('rotating')}
+                  className={
+                    qrMode === 'rotating'
+                      ? 'rounded-sm bg-accent px-3 py-1.5 text-sm font-bold text-accent-foreground'
+                      : 'rounded-sm px-3 py-1.5 text-sm font-medium text-muted-foreground'
+                  }
+                >
+                  Rotating
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQrMode('static')}
+                  className={
+                    qrMode === 'static'
+                      ? 'rounded-sm bg-accent px-3 py-1.5 text-sm font-bold text-accent-foreground'
+                      : 'rounded-sm px-3 py-1.5 text-sm font-medium text-muted-foreground'
+                  }
+                >
+                  Static
+                </button>
+              </div>
+
+              {qrMode === 'rotating' ? (
+                <input
+                  type="number"
+                  min={3}
+                  max={30}
+                  value={rotationSeconds}
+                  onChange={(e) => setRotationSeconds(Number(e.target.value))}
+                  aria-label="QR rotates every (seconds)"
+                  className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2.5 font-mono text-card-foreground outline-none focus:border-ring"
+                />
+              ) : (
+                <>
+                  <input
+                    type="number"
+                    min={1}
+                    max={STATIC_MINUTES_MAX}
+                    value={staticMinutes}
+                    onChange={(e) => setStaticMinutes(Number(e.target.value))}
+                    aria-label="Stays the same for (minutes)"
+                    className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2.5 font-mono text-card-foreground outline-none focus:border-ring"
+                  />
+                  <span className="meta mt-1.5 block text-destructive">
+                    Screenshots of this QR will work for the full {staticMinutes} minutes — pick the
+                    shortest window that covers your session.
+                  </span>
+                </>
+              )}
             </label>
 
             <label className="block">
@@ -172,6 +219,10 @@ export default function SessionControl({
                 onChange={(e) => setDisplayCount(Number(e.target.value))}
                 className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2.5 font-mono text-card-foreground outline-none focus:border-ring"
               />
+              <span className="meta mt-1.5 block">
+                Flags the dashboard if more displays than this are live at once — catches a link left
+                open somewhere unexpected.
+              </span>
             </label>
           </div>
 

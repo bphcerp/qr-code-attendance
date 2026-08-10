@@ -2,7 +2,7 @@ import { and, eq, isNull } from 'drizzle-orm'
 import { db } from '@/db'
 import { classSessions } from '@/db/schema'
 import { errorResponse, requireCourseAccess, HttpError } from '@/lib/guards'
-import { newSessionSecret } from '@/lib/token'
+import { newSessionSecret, isValidRotationSeconds } from '@/lib/token'
 
 export async function POST(req: Request, { params }: { params: Promise<{ courseId: string }> }) {
   try {
@@ -11,6 +11,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ courseI
 
     const body = await req.json().catch(() => ({}))
     const rotationSeconds = Number(body.rotationSeconds) || 5
+    if (!isValidRotationSeconds(rotationSeconds)) throw new HttpError(400, 'invalid_rotation_seconds')
     const declaredDisplayCount = Number(body.declaredDisplayCount) || 1
 
     // One open session per course at a time. Two live sessions would each hand

@@ -19,6 +19,15 @@ const CODE_MAX_AGE_TICKS = 2
 // instead of being told their code was wrong.
 const STALE_DIAGNOSTIC_TICKS = 12
 
+// A "static" QR is the same rotation mechanism with a much longer window --
+// faculty pick how long a screenshot of it stays valid, capped so it can't
+// outlive a single lab block by much.
+export const STATIC_MINUTES_MAX = 240
+
+export function isValidRotationSeconds(seconds: number) {
+  return (seconds >= 3 && seconds <= 30) || (seconds >= 60 && seconds <= STATIC_MINUTES_MAX * 60)
+}
+
 function encode(buf: Buffer, length: number) {
   let out = ''
   for (let i = 0; i < length; i++) {
