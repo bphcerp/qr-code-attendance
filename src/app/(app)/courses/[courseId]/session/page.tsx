@@ -39,7 +39,6 @@ export default async function SessionPage({
       id: classSessions.id,
       startedAt: classSessions.startedAt,
       rotationSeconds: classSessions.rotationSeconds,
-      declaredDisplayCount: classSessions.declaredDisplayCount,
     })
     .from(classSessions)
     .where(and(eq(classSessions.courseId, courseId), isNull(classSessions.endedAt)))

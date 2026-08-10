@@ -1,14 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { encode } from 'next-auth/jwt'
 import { db } from '../src/db'
-import {
-  users,
-  courses,
-  enrollments,
-  classSessions,
-  attendanceFlags,
-  attendanceRecords,
-} from '../src/db/schema'
+import { users, courses, enrollments, classSessions } from '../src/db/schema'
 import { currentCounter, deriveQrToken } from '../src/lib/token'
 
 // The Google OAuth client doesn't exist yet, so there is no way to reach a
@@ -129,7 +122,7 @@ async function main() {
   const started = await fetch(`${BASE}/api/courses/${course.id}/sessions`, {
     method: 'POST',
     headers: { cookie: profCookie, 'content-type': 'application/json' },
-    body: JSON.stringify({ rotationSeconds: 5, declaredDisplayCount: 2 }),
+    body: JSON.stringify({ rotationSeconds: 5 }),
   })
   const session = await started.json()
   check('faculty starts a session', started.status === 200 && Boolean(session.id))
@@ -145,8 +138,6 @@ async function main() {
   const stats = await (await get(`/api/sessions/${session.id}/stats`, profCookie)).json()
   check('stats report the roster size', stats.roster === 2)
   check('stats report nobody marked yet', stats.marked === 0)
-  check('stats carry the declared display count', stats.declaredDisplayCount === 2)
-  check('no displays are live yet', stats.activeDisplays === 0)
   check(
     "another faculty is refused the stats",
     (await get(`/api/sessions/${session.id}/stats`, otherCookie)).status === 403,
@@ -173,11 +164,7 @@ async function main() {
   const afterPoll = await (await get(`/api/sessions/${session.id}/stats`, profCookie)).json()
   check('one poll makes the display count as live', afterPoll.activeDisplays === 1)
 
-  // Two students marking from one handset is the proxy signature. Neither is
-  // rejected -- the same fingerprint is produced by two classmates owning the
-  // same phone model, so this has to stay a flag -- but it must be recorded,
-  // because the flags are the only thing that makes the attempt discoverable.
-  console.log('\nProxy defences')
+  console.log('\nMarking attendance')
   const [secretRow] = await db
     .select({ secret: classSessions.secret, startedAt: classSessions.startedAt })
     .from(classSessions)
@@ -185,48 +172,21 @@ async function main() {
   const counter = currentCounter(secretRow.startedAt, 5)
   const token = deriveQrToken(secretRow.secret, session.id, counter)
 
-  const ONE_PHONE = 'fp-single-handset'
-  const mark = (cookie: string, fingerprint: string) =>
+  const mark = (cookie: string) =>
     fetch(`${BASE}/api/attendance/mark`, {
       method: 'POST',
       headers: { cookie, 'content-type': 'application/json' },
-      body: JSON.stringify({ sessionId: session.id, token, fingerprint, geoDenied: true }),
+      body: JSON.stringify({ sessionId: session.id, token }),
     })
 
-  const first = await mark(studentCookie, ONE_PHONE)
-  check('a student with no device yet can mark', first.status === 200)
+  const first = await mark(studentCookie)
+  check('an enrolled student can mark', first.status === 200)
 
-  const second = await mark(student2Cookie, ONE_PHONE)
-  check('a second student on the same handset is not blocked', second.status === 200)
-
-  // The browser keeps the device cookie the first mark issued. Without it the
-  // repeat would be turned away by device binding before the duplicate check
-  // ever runs, which passes for the wrong reason.
-  const deviceCookie = first.headers.get('set-cookie')?.split(';')[0] ?? ''
-  check('the first mark issues a device cookie', deviceCookie.startsWith('att_device='))
-
-  const repeat = await mark(`${studentCookie}; ${deviceCookie}`, ONE_PHONE)
+  const repeat = await mark(studentCookie)
   check('the same student scanning twice is already_marked', repeat.status === 409)
 
-  const strangerPhone = await mark(student2Cookie, 'fp-some-other-handset')
-  check('a student who already marked cannot mark again elsewhere', strangerPhone.status !== 200)
-
-  const raised = await db
-    .select({ kind: attendanceFlags.kind, student: attendanceRecords.studentEmail })
-    .from(attendanceFlags)
-    .innerJoin(attendanceRecords, eq(attendanceRecords.id, attendanceFlags.recordId))
-    .where(eq(attendanceRecords.sessionId, session.id))
-
-  const kinds = (email: string) => raised.filter((r) => r.student === email).map((r) => r.kind)
-  check('a first-time device registration is flagged', kinds(STUDENT).includes('device_first_use'))
-  check(
-    'the shared handset raises a fingerprint collision',
-    kinds(STUDENT2).includes('fingerprint_collision'),
-  )
-  check(
-    'the first mark of a colliding pair is not retro-flagged',
-    !kinds(STUDENT).includes('fingerprint_collision'),
-  )
+  const second = await mark(student2Cookie)
+  check('a different student marking is unaffected', second.status === 200)
 
   console.log('\nCleanup')
   await db.delete(classSessions).where(eq(classSessions.courseId, course.id))

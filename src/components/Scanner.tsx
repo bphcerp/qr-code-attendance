@@ -3,12 +3,9 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { BrowserQRCodeReader, type IScannerControls } from '@zxing/browser'
-import { deviceFingerprint } from '@/lib/fingerprint'
 import { Button } from '@/components/ui/button'
 
 type Phase = 'scanning' | 'sending' | 'done' | 'failed'
-
-type Geo = { lat?: number; lng?: number; accuracy?: number; denied?: boolean }
 
 type ZoomRange = { min: number; max: number; step: number }
 
@@ -18,8 +15,6 @@ const failureLabels: Record<string, string> = {
   session_closed: 'This class has stopped taking attendance.',
   not_enrolled: 'You are not on the roster for this course.',
   already_marked: 'You are already marked present for this class.',
-  device_mismatch:
-    'This is not the phone registered to your account. Ask your instructor to approve a device change.',
   bad_request: 'Something was missing from the scan. Try again.',
   unauthenticated: 'Your sign-in expired. Sign in again.',
 }
@@ -39,7 +34,6 @@ export default function Scanner({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const controlsRef = useRef<IScannerControls | null>(null)
-  const geoRef = useRef<Geo>({})
 
   const [attempt, setAttempt] = useState(0)
   const [phase, setPhase] = useState<Phase>('scanning')
@@ -49,44 +43,15 @@ export default function Scanner({
   const [code, setCode] = useState('')
   const [zoomRange, setZoomRange] = useState<ZoomRange | null>(null)
 
-  useEffect(() => {
-    if (!navigator.geolocation) {
-      geoRef.current = { denied: true }
-      return
-    }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        geoRef.current = {
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          accuracy: pos.coords.accuracy,
-        }
-      },
-      () => {
-        geoRef.current = { denied: true }
-      },
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 },
-    )
-  }, [])
-
   const submit = useCallback(
     async (raw: string) => {
       setPhase('sending')
-      const geo = geoRef.current
 
       try {
         const res = await fetch('/api/attendance/mark', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            sessionId,
-            token: raw,
-            fingerprint: await deviceFingerprint(),
-            lat: geo.lat,
-            lng: geo.lng,
-            accuracy: geo.accuracy,
-            geoDenied: geo.denied ?? false,
-          }),
+          body: JSON.stringify({ sessionId, token: raw }),
         })
 
         if (res.ok) {

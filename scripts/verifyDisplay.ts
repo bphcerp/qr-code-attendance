@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 import { db } from '../src/db'
 import { users, courses, classSessions, displayTokens } from '../src/db/schema'
 import { newSessionSecret } from '../src/lib/token'
-import { issueDisplayToken, activeDisplayCount, revokeDisplayTokens } from '../src/lib/displayToken'
+import { issueDisplayToken, revokeDisplayTokens } from '../src/lib/displayToken'
 
 const BASE = process.env.BASE_URL ?? 'http://localhost:3001'
 const FACULTY = 'prof.test@hyderabad.bits-pilani.ac.in'
@@ -36,7 +36,7 @@ async function main() {
 
   const [session] = await db
     .insert(classSessions)
-    .values({ courseId: course.id, secret: newSessionSecret(), declaredDisplayCount: 2 })
+    .values({ courseId: course.id, secret: newSessionSecret() })
     .returning({ id: classSessions.id })
 
   const { token } = await issueDisplayToken(session.id, FACULTY)
@@ -62,12 +62,6 @@ async function main() {
   check('rejection names the reason', other.body.error === 'display_token_wrong_device', String(other.body.error))
   check('original IP still works', (await get(url(token), '10.0.0.1')).status === 200)
 
-  console.log('\nLiveness counting')
-  check('one live display counted', (await activeDisplayCount(session.id)) === 1)
-  const { token: second } = await issueDisplayToken(session.id, FACULTY)
-  await get(url(second), '10.0.0.2')
-  check('two live displays counted', (await activeDisplayCount(session.id)) === 2)
-
   console.log('\nRotation')
   const a = await get(url(token), '10.0.0.1')
   await new Promise((r) => setTimeout(r, 5500))
@@ -81,7 +75,6 @@ async function main() {
   const revoked = await get(url(token), '10.0.0.1')
   check('revoked token stops working', revoked.status === 403, JSON.stringify(revoked.body))
   check('revocation names the reason', revoked.body.error === 'display_token_revoked', String(revoked.body.error))
-  check('revoked displays drop out of the live count', (await activeDisplayCount(session.id)) === 0)
 
   console.log(`\n${pass} passed, ${fail} failed\n`)
   process.exit(fail ? 1 : 0)

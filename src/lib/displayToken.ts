@@ -1,14 +1,8 @@
 import { createHash, randomBytes } from 'crypto'
-import { and, eq, gt, isNull, sql } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { db } from '@/db'
 import { displayTokens, classSessions, auditLog } from '@/db/schema'
 import { HttpError } from './guards'
-
-// A display is considered live if it polled within this window. Three missed
-// polls at the default 5s rotation -- long enough that one dropped request
-// doesn't make a projector vanish from the count, short enough that unplugging
-// one shows up while the lecturer is still standing there.
-const LIVE_WINDOW_SECONDS = 15
 
 const DEFAULT_TTL_HOURS = 4
 
@@ -91,24 +85,6 @@ export async function redeemDisplayToken(sessionId: string, token: string, ip: s
   return row
 }
 
-// Counted from lastPingAt rather than from open connections: serverless
-// instances share no memory, so there is no single process that knows how many
-// displays exist. Same reason SU Connect keeps its rate-limit counter in
-// Postgres instead of in the edge function.
-export async function activeDisplayCount(sessionId: string) {
-  const [row] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(displayTokens)
-    .where(
-      and(
-        eq(displayTokens.sessionId, sessionId),
-        isNull(displayTokens.revokedAt),
-        gt(displayTokens.lastPingAt, sql`now() - make_interval(secs => ${LIVE_WINDOW_SECONDS})`),
-      ),
-    )
-  return row?.count ?? 0
-}
-
 export async function loadOpenSession(sessionId: string) {
   const [session] = await db
     .select({
@@ -118,8 +94,6 @@ export async function loadOpenSession(sessionId: string) {
       startedAt: classSessions.startedAt,
       endedAt: classSessions.endedAt,
       rotationSeconds: classSessions.rotationSeconds,
-      roomLat: classSessions.roomLat,
-      roomLng: classSessions.roomLng,
     })
     .from(classSessions)
     .where(eq(classSessions.id, sessionId))
