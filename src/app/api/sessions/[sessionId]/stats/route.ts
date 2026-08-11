@@ -1,7 +1,8 @@
 import { count, eq } from 'drizzle-orm'
 import { db } from '@/db'
-import { attendanceRecords, classSessions, enrollments } from '@/db/schema'
+import { attendanceFlags, attendanceRecords, classSessions, enrollments } from '@/db/schema'
 import { errorResponse, requireCourseAccess, requireUser, HttpError } from '@/lib/guards'
+import { activeDisplayCount } from '@/lib/displayToken'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,6 +24,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ session
         courseId: classSessions.courseId,
         startedAt: classSessions.startedAt,
         endedAt: classSessions.endedAt,
+        declaredDisplayCount: classSessions.declaredDisplayCount,
       })
       .from(classSessions)
       .where(eq(classSessions.id, sessionId))
@@ -30,22 +32,33 @@ export async function GET(_req: Request, { params }: { params: Promise<{ session
 
     await requireCourseAccess(session.courseId)
 
-    const bySource = await db
-      .select({ source: attendanceRecords.source, n: count() })
-      .from(attendanceRecords)
-      .where(eq(attendanceRecords.sessionId, sessionId))
-      .groupBy(attendanceRecords.source)
-
-    const [roster] = await db
-      .select({ n: count() })
-      .from(enrollments)
-      .where(eq(enrollments.courseId, session.courseId))
+    const [bySource, [roster], flags, activeDisplays] = await Promise.all([
+      db
+        .select({ source: attendanceRecords.source, n: count() })
+        .from(attendanceRecords)
+        .where(eq(attendanceRecords.sessionId, sessionId))
+        .groupBy(attendanceRecords.source),
+      db
+        .select({ n: count() })
+        .from(enrollments)
+        .where(eq(enrollments.courseId, session.courseId)),
+      db
+        .select({ kind: attendanceFlags.kind, n: count() })
+        .from(attendanceFlags)
+        .innerJoin(attendanceRecords, eq(attendanceRecords.id, attendanceFlags.recordId))
+        .where(eq(attendanceRecords.sessionId, sessionId))
+        .groupBy(attendanceFlags.kind),
+      activeDisplayCount(sessionId),
+    ])
 
     return Response.json(
       {
         marked: bySource.reduce((total, row) => total + row.n, 0),
         roster: roster?.n ?? 0,
         bySource: Object.fromEntries(bySource.map((row) => [row.source, row.n])),
+        flags: flags.map((row) => ({ kind: row.kind, count: row.n })),
+        activeDisplays,
+        declaredDisplayCount: session.declaredDisplayCount,
         startedAt: session.startedAt.toISOString(),
         endedAt: session.endedAt?.toISOString() ?? null,
       },

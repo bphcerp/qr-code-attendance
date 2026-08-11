@@ -12,6 +12,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ courseI
     const body = await req.json().catch(() => ({}))
     const rotationSeconds = Number(body.rotationSeconds) || 5
     if (!isValidRotationSeconds(rotationSeconds)) throw new HttpError(400, 'invalid_rotation_seconds')
+    const declaredDisplayCount = Number(body.declaredDisplayCount) || 1
 
     // One open session per course at a time. Two live sessions would each hand
     // out valid tokens for the same room, and a student marking against the
@@ -24,7 +25,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ courseI
 
     const [session] = await db
       .insert(classSessions)
-      .values({ courseId, secret: newSessionSecret(), rotationSeconds })
+      .values({
+        courseId,
+        secret: newSessionSecret(),
+        rotationSeconds,
+        declaredDisplayCount,
+        roomLat: body.roomLat ?? null,
+        roomLng: body.roomLng ?? null,
+      })
       .returning({ id: classSessions.id, startedAt: classSessions.startedAt })
 
     return Response.json(session)

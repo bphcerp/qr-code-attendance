@@ -1,6 +1,12 @@
 import { errorResponse, HttpError } from '@/lib/guards'
 import { clientIp } from '@/lib/request'
-import { loadOpenSession, redeemDisplayToken } from '@/lib/displayToken'
+import {
+  fetchSession,
+  assertSessionOpen,
+  fetchDisplayToken,
+  assertTokenValid,
+  finalizeRedemption,
+} from '@/lib/displayToken'
 import { currentCounter, deriveQrToken, deriveCode, nextRotationAt } from '@/lib/token'
 
 export const dynamic = 'force-dynamic'
@@ -20,8 +26,21 @@ export async function GET(req: Request, { params }: { params: Promise<{ sessionI
     const dt = new URL(req.url).searchParams.get('dt')
     if (!dt) throw new HttpError(403, 'display_token_missing')
 
-    const session = await loadOpenSession(sessionId)
-    await redeemDisplayToken(sessionId, dt, clientIp(req))
+    const ip = clientIp(req)
+
+    // Both reads are independent, so fire them together -- this endpoint is
+    // polled continuously by every open display for the whole lecture, so the
+    // saved round trip matters here more than anywhere else in the app.
+    // Validation stays sequential and in the original order (session first)
+    // so a closed session still always short-circuits before a token's
+    // validity is looked at or reported.
+    const [sessionRow, tokenRow] = await Promise.all([
+      fetchSession(sessionId),
+      fetchDisplayToken(sessionId, dt),
+    ])
+    const session = assertSessionOpen(sessionRow)
+    const validToken = assertTokenValid(tokenRow, ip)
+    await finalizeRedemption(validToken, ip)
 
     const counter = currentCounter(session.startedAt, session.rotationSeconds)
 

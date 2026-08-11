@@ -28,10 +28,20 @@ export default async function LoginPage() {
           Only {domains.join(', ') || 'approved institute'} addresses can sign in.
         </p>
 
+        {/* DPDP 2023 makes location personal data, so what gets collected is
+            stated at the door instead of in a policy page nobody opens. */}
         <div className="mt-6 border-t border-border pt-5">
           <p className="meta">What this app records</p>
+          <ul className="mt-3 mb-0 list-none space-y-2 p-0 text-sm text-muted-foreground">
+            <li>A device fingerprint and a device cookie, so one phone can&rsquo;t mark two people.</li>
+            <li>Your IP address and the time of every mark.</li>
+            <li>
+              Coarse location when you scan, if you allow it. Refusing does not block you &mdash;
+              it is recorded as a flag your instructor can see.
+            </li>
+          </ul>
           <p className="mt-3 text-sm text-muted-foreground">
-            Which class you were marked present for, and when. Nothing else.
+            Location and IP are purged one semester after the class. The attendance itself is kept.
           </p>
         </div>
       </div>

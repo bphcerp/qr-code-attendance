@@ -6,3 +6,7 @@ export function clientIp(req: Request) {
   if (forwarded) return forwarded.split(',')[0].trim()
   return req.headers.get('x-real-ip') ?? null
 }
+
+export function userAgent(req: Request) {
+  return req.headers.get('user-agent')
+}
