@@ -26,7 +26,8 @@ type OpenSession = {
 }
 
 type StudentAttendance = {
-  email: string
+  studentId: string
+  email: string | null
   name: string
   markedAt: string | null
   source: 'qr' | 'code' | 'manual' | null
@@ -102,7 +103,9 @@ export default function SessionControl({
     if (!query) return stats.students
     return stats.students.filter(
       (student) =>
-        student.name.toLowerCase().includes(query) || student.email.toLowerCase().includes(query),
+        student.name.toLowerCase().includes(query) ||
+        student.studentId.toLowerCase().includes(query) ||
+        student.email?.toLowerCase().includes(query),
     )
   }, [stats, studentQuery])
 
@@ -521,10 +524,12 @@ export default function SessionControl({
                     </thead>
                     <tbody className="divide-y divide-border">
                       {visibleStudents.map((student) => (
-                        <tr key={student.email} className="transition-colors hover:bg-muted/30">
+                        <tr key={student.studentId} className="transition-colors hover:bg-muted/30">
                           <td className="px-4 py-3">
                             <p className="font-medium text-card-foreground">{student.name}</p>
-                            <p className="mt-0.5 text-xs text-muted-foreground">{student.email}</p>
+                            <p className="mt-0.5 font-mono text-xs text-muted-foreground">
+                              {student.studentId}
+                            </p>
                           </td>
                           <td className="px-4 py-3">
                             <StatusChip tone={student.markedAt ? 'present' : 'pending'}>

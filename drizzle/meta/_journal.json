@@ -15,6 +15,13 @@
       "when": 1786353924073,
       "tag": "0001_broken_lilith",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786536000000,
+      "tag": "0002_course_roster",
+      "breakpoints": true
     }
   ]
 }

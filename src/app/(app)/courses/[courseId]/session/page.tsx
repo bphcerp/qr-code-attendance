@@ -1,10 +1,12 @@
 import { notFound, redirect } from 'next/navigation'
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, count, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 import { db } from '@/db'
-import { classSessions, courses } from '@/db/schema'
+import { attendanceRecords, classSessions, courseRoster, courses, enrollments } from '@/db/schema'
 import { auth } from '@/lib/auth'
 import { getCurrentUser } from '@/lib/currentUser'
 import SessionControl from '@/components/SessionControl'
+import CourseRosterUpload from '@/components/CourseRosterUpload'
+import AttendanceHistory, { type HistoryRow } from '@/components/AttendanceHistory'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,7 +23,7 @@ export default async function SessionPage({
   // course and open-session are independent of each other and of `me` -- the
   // parent layout already fetched `me` for this request, so getCurrentUser()
   // is a cache() hit rather than a fourth round trip.
-  const [me, [course], [open]] = await Promise.all([
+  const [me, [course], [open], [rosterCount], [enrollmentCount], sessions] = await Promise.all([
     getCurrentUser(email),
     db
       .select({
@@ -41,6 +43,19 @@ export default async function SessionPage({
       })
       .from(classSessions)
       .where(and(eq(classSessions.courseId, courseId), isNull(classSessions.endedAt))),
+    db
+      .select({ count: count() })
+      .from(courseRoster)
+      .where(eq(courseRoster.courseId, courseId)),
+    db
+      .select({ count: count() })
+      .from(enrollments)
+      .where(eq(enrollments.courseId, courseId)),
+    db
+      .select({ id: classSessions.id, startedAt: classSessions.startedAt, endedAt: classSessions.endedAt })
+      .from(classSessions)
+      .where(and(eq(classSessions.courseId, courseId), isNotNull(classSessions.endedAt)))
+      .orderBy(classSessions.startedAt),
   ])
 
   // 404 rather than 403 on someone else's course: a wrong answer here tells the
@@ -48,12 +63,34 @@ export default async function SessionPage({
   if (!course) notFound()
   if (me?.role !== 'admin' && course.facultyEmail.toLowerCase() !== email) notFound()
 
+  const sessionIds = sessions.map((session) => session.id)
+  const attendanceCounts = sessionIds.length
+    ? await db
+        .select({ sessionId: attendanceRecords.sessionId, count: count() })
+        .from(attendanceRecords)
+        .where(inArray(attendanceRecords.sessionId, sessionIds))
+        .groupBy(attendanceRecords.sessionId)
+    : []
+  const countBySession = new Map(attendanceCounts.map((row) => [row.sessionId, row.count]))
+  const roster = (rosterCount?.count ?? 0) > 0 ? rosterCount.count : (enrollmentCount?.count ?? 0)
+  const history: HistoryRow[] = sessions.map((session) => ({
+    id: session.id,
+    startedAt: session.startedAt.toISOString(),
+    endedAt: session.endedAt?.toISOString() ?? null,
+    present: countBySession.get(session.id) ?? 0,
+    roster,
+  }))
+
   return (
-    <SessionControl
-      courseId={course.id}
-      courseCode={course.code}
-      courseTitle={course.title}
-      openSession={open ? { ...open, startedAt: open.startedAt.toISOString() } : null}
-    />
+    <div className="space-y-6 py-8">
+      <SessionControl
+        courseId={course.id}
+        courseCode={course.code}
+        courseTitle={course.title}
+        openSession={open ? { ...open, startedAt: open.startedAt.toISOString() } : null}
+      />
+      <CourseRosterUpload courseId={course.id} initialCount={rosterCount?.count ?? 0} />
+      <AttendanceHistory rows={history} />
+    </div>
   )
 }

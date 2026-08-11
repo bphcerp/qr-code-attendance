@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers'
 import { and, countDistinct, eq, ne } from 'drizzle-orm'
 import { db } from '@/db'
-import { enrollments, attendanceRecords, attendanceFlags } from '@/db/schema'
+import { enrollments, attendanceRecords, attendanceFlags, courseRoster } from '@/db/schema'
 import { errorResponse, requireUser, HttpError } from '@/lib/guards'
 import { isUniqueViolation } from '@/db/errors'
 import { clientIp, userAgent } from '@/lib/request'
@@ -9,6 +9,7 @@ import { loadOpenSession } from '@/lib/displayToken'
 import { verifyToken } from '@/lib/token'
 import { checkDevice, serializeDeviceCookie, DEVICE_COOKIE } from '@/lib/device'
 import { haversineMetres, OUTLIER_METRES, IMPRECISE_ACCURACY_METRES } from '@/lib/geo'
+import { normalizeStudentId, studentIdFromEmail } from '@/lib/studentId'
 
 type Body = {
   sessionId?: string
@@ -50,7 +51,23 @@ export async function POST(req: Request) {
       .where(
         and(eq(enrollments.courseId, session.courseId), eq(enrollments.studentEmail, email)),
       )
-    if (!enrolled) throw new HttpError(403, 'not_enrolled')
+    if (!enrolled) {
+      // A professor's uploaded roster is keyed by student ID, while attendance
+      // is keyed by the authenticated email. Matching the email local-part lets
+      // first-time students attend without asking the professor to re-import them.
+      const roster = await db
+        .select({ studentId: courseRoster.studentId })
+        .from(courseRoster)
+        .where(eq(courseRoster.courseId, session.courseId))
+      const matchesRoster = roster.some(
+        (student) => normalizeStudentId(student.studentId) === studentIdFromEmail(email),
+      )
+      if (!matchesRoster) throw new HttpError(403, 'not_enrolled')
+      await db
+        .insert(enrollments)
+        .values({ courseId: session.courseId, studentEmail: email })
+        .onConflictDoNothing()
+    }
 
     // 4. device binding, before the insert so a rejected device leaves no trace
     const jar = await cookies()

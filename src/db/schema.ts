@@ -81,6 +81,22 @@ export const enrollments = pgTable(
   ],
 )
 
+export const courseRoster = pgTable(
+  'course_roster',
+  {
+    courseId: uuid('course_id')
+      .notNull()
+      .references(() => courses.id, { onDelete: 'cascade' }),
+    studentId: varchar('student_id').notNull(),
+    studentName: varchar('student_name').notNull(),
+    uploadedAt: timestamp('uploaded_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.courseId, table.studentId] }),
+    index('course_roster_course_idx').on(table.courseId),
+  ],
+)
+
 export const classSessions = pgTable(
   'class_sessions',
   {

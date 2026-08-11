@@ -123,19 +123,14 @@ async function StudentHome({ email }: { email: string }) {
             </>
           )
 
-          const liveSessionId = liveByCourse.get(course.id)
-          return liveSessionId ? (
+          return (
             <Link
               key={course.id}
-              href={`/scan?session=${liveSessionId}`}
+              href={`/courses/${course.id}`}
               className="rounded-lg border border-border bg-card p-5 transition-colors duration-150 hover:border-primary"
             >
               {card}
             </Link>
-          ) : (
-            <div key={course.id} className="rounded-lg border border-border bg-card p-5">
-              {card}
-            </div>
           )
         })}
       </div>

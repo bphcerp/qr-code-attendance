@@ -1,15 +1,17 @@
-import { and, count, eq } from 'drizzle-orm'
+import { count, eq } from 'drizzle-orm'
 import { db } from '@/db'
 import {
   attendanceFlags,
   attendanceRecords,
   classSessions,
   courses,
+  courseRoster,
   enrollments,
   users,
 } from '@/db/schema'
 import { errorResponse, requireRole, HttpError } from '@/lib/guards'
 import { activeDisplayCount } from '@/lib/displayToken'
+import { studentIdFromEmail } from '@/lib/studentId'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,25 +44,29 @@ export async function GET(_req: Request, { params }: { params: Promise<{ session
       throw new HttpError(403, 'forbidden')
     }
 
-    const [students, flags, activeDisplays] = await Promise.all([
+    const [roster, enrolledStudents, attendance, flags, activeDisplays] = await Promise.all([
       db
         .select({
-          email: enrollments.studentEmail,
-          name: users.name,
+          studentId: courseRoster.studentId,
+          name: courseRoster.studentName,
+        })
+        .from(courseRoster)
+        .where(eq(courseRoster.courseId, session.courseId))
+        .orderBy(courseRoster.studentName, courseRoster.studentId),
+      db
+        .select({ email: enrollments.studentEmail, name: users.name })
+        .from(enrollments)
+        .innerJoin(users, eq(users.email, enrollments.studentEmail))
+        .where(eq(enrollments.courseId, session.courseId))
+        .orderBy(users.name, users.email),
+      db
+        .select({
+          email: attendanceRecords.studentEmail,
           markedAt: attendanceRecords.markedAt,
           source: attendanceRecords.source,
         })
-        .from(enrollments)
-        .innerJoin(users, eq(users.email, enrollments.studentEmail))
-        .leftJoin(
-          attendanceRecords,
-          and(
-            eq(attendanceRecords.sessionId, sessionId),
-            eq(attendanceRecords.studentEmail, enrollments.studentEmail),
-          ),
-        )
-        .where(eq(enrollments.courseId, session.courseId))
-        .orderBy(users.name, users.email),
+        .from(attendanceRecords)
+        .where(eq(attendanceRecords.sessionId, sessionId)),
       db
         .select({ kind: attendanceFlags.kind, n: count() })
         .from(attendanceFlags)
@@ -72,9 +78,34 @@ export async function GET(_req: Request, { params }: { params: Promise<{ session
 
     // The roster rows already carry attendance source, so derive the summary
     // here instead of making Postgres scan attendance_records a second time.
+    const attendanceByStudent = new Map(
+      attendance.map((record) => [studentIdFromEmail(record.email), record]),
+    )
+    const visibleStudents = roster.length
+      ? roster.map((student) => {
+          const record = attendanceByStudent.get(studentIdFromEmail(student.studentId))
+          return {
+            studentId: student.studentId,
+            email: record?.email ?? null,
+            name: student.name,
+            markedAt: record?.markedAt ?? null,
+            source: record?.source ?? null,
+          }
+        })
+      : enrolledStudents.map((student) => {
+          const record = attendanceByStudent.get(studentIdFromEmail(student.email))
+          return {
+            studentId: studentIdFromEmail(student.email),
+            email: student.email,
+            name: student.name,
+            markedAt: record?.markedAt ?? null,
+            source: record?.source ?? null,
+          }
+        })
+
     const bySource: Record<string, number> = {}
     let marked = 0
-    for (const student of students) {
+    for (const student of visibleStudents) {
       if (!student.source) continue
       marked++
       bySource[student.source] = (bySource[student.source] ?? 0) + 1
@@ -83,10 +114,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ session
     return Response.json(
       {
         marked,
-        roster: students.length,
+        roster: visibleStudents.length,
         bySource,
-        students: students
+        students: visibleStudents
           .map((student) => ({
+            studentId: student.studentId,
             email: student.email,
             name: student.name,
             markedAt: student.markedAt?.toISOString() ?? null,
