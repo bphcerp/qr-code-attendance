@@ -1,10 +1,18 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
 import { BrowserQRCodeReader, type IScannerControls } from '@zxing/browser'
 import { deviceFingerprint } from '@/lib/fingerprint'
 import { Button } from '@/components/ui/button'
+import Spinner from '@/components/ui/spinner'
+import { CODE_LENGTH } from '@/lib/token'
 
 type Phase = 'scanning' | 'sending' | 'done' | 'failed'
 
@@ -40,6 +48,8 @@ export default function Scanner({
   const videoRef = useRef<HTMLVideoElement>(null)
   const controlsRef = useRef<IScannerControls | null>(null)
   const geoRef = useRef<Geo>({})
+  const pointersRef = useRef(new Map<number, { x: number; y: number }>())
+  const pinchRef = useRef<{ distance: number; zoom: number } | null>(null)
 
   const [attempt, setAttempt] = useState(0)
   const [phase, setPhase] = useState<Phase>('scanning')
@@ -48,6 +58,8 @@ export default function Scanner({
   const [codeOpen, setCodeOpen] = useState(false)
   const [code, setCode] = useState('')
   const [zoomRange, setZoomRange] = useState<ZoomRange | null>(null)
+  const [zoom, setZoom] = useState(1)
+  const [cssZoom, setCssZoom] = useState(1)
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -90,6 +102,7 @@ export default function Scanner({
         })
 
         if (res.ok) {
+          navigator.vibrate?.(30)
           setPhase('done')
           return
         }
@@ -99,6 +112,7 @@ export default function Scanner({
       } catch {
         setFailure('unknown')
       }
+      navigator.vibrate?.([35, 50, 35])
       setPhase('failed')
     },
     [sessionId],
@@ -131,6 +145,7 @@ export default function Scanner({
           | undefined
         if (capabilities?.zoom) {
           setZoomRange({ ...capabilities.zoom, step: capabilities.zoom.step || 0.1 })
+          setZoom(capabilities.zoom.min)
         }
       })
       .catch(() => {
@@ -164,6 +179,49 @@ export default function Scanner({
     track?.applyConstraints({ advanced: [{ zoom: value }] } as unknown as MediaTrackConstraints)
   }
 
+  function updateZoom(value: number) {
+    if (zoomRange) {
+      const next = Math.min(zoomRange.max, Math.max(zoomRange.min, value))
+      setZoom(next)
+      applyZoom(next)
+      return
+    }
+
+    setCssZoom(Math.min(3, Math.max(1, value)))
+  }
+
+  function pointerDistance() {
+    const points = [...pointersRef.current.values()]
+    if (points.length < 2) return 0
+    return Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y)
+  }
+
+  function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    event.currentTarget.setPointerCapture(event.pointerId)
+    pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
+    if (pointersRef.current.size === 2) {
+      pinchRef.current = {
+        distance: pointerDistance(),
+        zoom: zoomRange ? zoom : cssZoom,
+      }
+    }
+  }
+
+  function handlePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!pointersRef.current.has(event.pointerId)) return
+    pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
+    if (pointersRef.current.size !== 2 || !pinchRef.current) return
+
+    const range = zoomRange ? zoomRange.max - zoomRange.min : 2
+    const delta = (pointerDistance() - pinchRef.current.distance) / event.currentTarget.clientWidth
+    updateZoom(pinchRef.current.zoom + delta * range)
+  }
+
+  function handlePointerEnd(event: ReactPointerEvent<HTMLDivElement>) {
+    pointersRef.current.delete(event.pointerId)
+    pinchRef.current = null
+  }
+
   function retry() {
     setFailure(null)
     setCode('')
@@ -173,9 +231,9 @@ export default function Scanner({
 
   if (phase === 'done') {
     return (
-      <div className="rounded-lg border border-border bg-card p-6 text-center">
+      <div className="animate-in fade-in-0 rounded-lg border border-border bg-card p-6 text-center duration-150">
         <p
-          className="font-[family-name:var(--heading)] text-5xl font-extrabold tracking-[-1.5px]"
+          className="stat text-[3rem]"
           style={{ color: 'var(--status-present)' }}
         >
           Marked
@@ -192,9 +250,9 @@ export default function Scanner({
 
   if (phase === 'failed' && failure) {
     return (
-      <div className="rounded-lg border border-border bg-card p-6 text-center">
+      <div className="animate-in fade-in-0 rounded-lg border border-border bg-card p-6 text-center duration-150">
         <p
-          className="font-[family-name:var(--heading)] text-4xl font-extrabold tracking-[-1.2px]"
+          className="stat"
           style={{ color: 'var(--status-absent)' }}
         >
           Not marked
@@ -214,16 +272,39 @@ export default function Scanner({
 
   return (
     <>
-      <div className="overflow-hidden rounded-lg border border-border bg-black">
+      <div
+        className="relative touch-pan-y overflow-hidden rounded-lg border border-border bg-black"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerEnd}
+        onPointerCancel={handlePointerEnd}
+      >
         <video
           ref={videoRef}
-          className="aspect-square w-full object-cover"
+          aria-label={`Camera preview for scanning ${courseCode}`}
+          className="aspect-square w-full object-cover transition-transform duration-150"
+          style={{ transform: `scale(${cssZoom})` }}
           muted
           playsInline
         />
+        <div className="scan-reticle" data-detected={phase === 'sending'} aria-hidden="true" />
       </div>
 
-      {phase === 'sending' && <p className="mt-3 text-center text-sm">Marking you present…</p>}
+      {phase === 'scanning' && !cameraBlocked && (
+        <p className="mt-3 text-center text-sm text-muted-foreground">
+          Align the projected QR inside the frame. Pinch to zoom.
+        </p>
+      )}
+
+      {phase === 'sending' && (
+        <p
+          role="status"
+          aria-live="polite"
+          className="mt-3 flex items-center justify-center gap-2 text-center text-sm"
+        >
+          <Spinner /> Marking you present…
+        </p>
+      )}
 
       {cameraBlocked && (
         <p className="mt-3 text-sm text-muted-foreground">
@@ -239,8 +320,10 @@ export default function Scanner({
             min={zoomRange.min}
             max={zoomRange.max}
             step={zoomRange.step}
-            defaultValue={zoomRange.min}
-            onChange={(e) => applyZoom(Number(e.target.value))}
+            value={zoom}
+            aria-label="Camera zoom"
+            aria-valuetext={`${zoom.toFixed(1)} times`}
+            onChange={(e) => updateZoom(Number(e.target.value))}
             className="mt-2 w-full accent-primary"
           />
         </label>
@@ -248,20 +331,23 @@ export default function Scanner({
 
       {codeOpen ? (
         <div className="mt-6 rounded-lg border border-border bg-card p-5">
-          <p className="meta">Can&rsquo;t scan? Type the code on screen</p>
+          <label htmlFor="attendance-code" className="meta">
+            Can&rsquo;t scan? Type the code on screen
+          </label>
           <div className="mt-3 flex gap-3">
             <input
+              id="attendance-code"
               value={code}
               onChange={(e) => setCode(e.target.value.toUpperCase())}
-              maxLength={8}
+              maxLength={CODE_LENGTH}
               autoCapitalize="characters"
               autoComplete="off"
               spellCheck={false}
-              placeholder="6 characters"
+              placeholder={`${CODE_LENGTH} characters`}
               className="min-w-0 flex-1 rounded-md border border-input bg-background px-3 py-2.5 font-mono text-xl tracking-[0.15em] text-card-foreground outline-none focus:border-ring"
             />
             <Button
-              disabled={code.length < 6 || phase === 'sending'}
+              disabled={code.length !== CODE_LENGTH || phase === 'sending'}
               onClick={() => submit(code)}
               className="px-6"
             >
@@ -270,13 +356,13 @@ export default function Scanner({
           </div>
         </div>
       ) : (
-        <button
-          type="button"
+        <Button
+          variant="link"
           onClick={() => setCodeOpen(true)}
-          className="mt-4 text-sm text-primary underline underline-offset-4"
+          className="mt-4 px-0"
         >
           Enter the code instead
-        </button>
+        </Button>
       )}
     </>
   )

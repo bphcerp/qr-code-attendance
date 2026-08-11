@@ -1,10 +1,21 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Copy, ExternalLink, MapPin } from 'lucide-react'
 import StatusChip from './StatusChip'
 import { Button } from '@/components/ui/button'
+import Spinner from '@/components/ui/spinner'
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
 import { STATIC_MINUTES_MAX } from '@/lib/token'
 
 type OpenSession = {
@@ -32,6 +43,18 @@ const flagLabels: Record<string, string> = {
   device_recently_rebound: 'Device changed recently',
 }
 
+const errorLabels: Record<string, string> = {
+  request_failed: 'Couldn’t reach the server. Check the hall Wi-Fi and try again.',
+  internal_error: 'The server hit a problem. Try again in a moment.',
+  location_unavailable: 'Your location is unavailable. You can still start without it.',
+  unauthenticated: 'Your sign-in expired. Sign in again and retry.',
+  forbidden: 'This account does not have permission to manage this course.',
+  not_found: 'This session could not be found. Refresh the page and try again.',
+  clipboard_unavailable: 'Couldn’t copy the link. Open it directly instead.',
+}
+
+type BusyAction = 'start' | 'generate' | 'revoke' | 'end'
+
 export default function SessionControl({
   courseId,
   courseCode,
@@ -44,8 +67,10 @@ export default function SessionControl({
   openSession: OpenSession | null
 }) {
   const router = useRouter()
-  const [busy, setBusy] = useState(false)
+  const [busyAction, setBusyAction] = useState<BusyAction | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [revokeOpen, setRevokeOpen] = useState(false)
+  const [endOpen, setEndOpen] = useState(false)
 
   const [qrMode, setQrMode] = useState<'rotating' | 'static'>('rotating')
   const [rotationSeconds, setRotationSeconds] = useState(5)
@@ -56,8 +81,10 @@ export default function SessionControl({
   const [displayLink, setDisplayLink] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [stats, setStats] = useState<Stats | null>(null)
+  const copyResetRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const sessionId = openSession?.id
+  const busy = busyAction !== null
 
   useEffect(() => {
     if (!sessionId) return
@@ -77,25 +104,38 @@ export default function SessionControl({
     }
   }, [sessionId])
 
-  async function post(url: string, method: string, body?: unknown) {
-    setBusy(true)
+  useEffect(
+    () => () => {
+      if (copyResetRef.current) clearTimeout(copyResetRef.current)
+    },
+    [],
+  )
+
+  async function post(url: string, method: string, action: BusyAction, body?: unknown) {
+    setBusyAction(action)
     setError(null)
-    const res = await fetch(url, {
-      method,
-      headers: body ? { 'content-type': 'application/json' } : undefined,
-      body: body ? JSON.stringify(body) : undefined,
-    })
-    setBusy(false)
-    if (!res.ok) {
-      const failed = await res.json().catch(() => ({}))
-      setError(failed.error ?? 'request_failed')
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: body ? { 'content-type': 'application/json' } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+      })
+      if (!res.ok) {
+        const failed = await res.json().catch(() => ({}))
+        setError(failed.error ?? 'request_failed')
+        return null
+      }
+      return res.json()
+    } catch {
+      setError('request_failed')
       return null
+    } finally {
+      setBusyAction(null)
     }
-    return res.json()
   }
 
   async function start() {
-    const created = await post(`/api/courses/${courseId}/sessions`, 'POST', {
+    const created = await post(`/api/courses/${courseId}/sessions`, 'POST', 'start', {
       rotationSeconds: qrMode === 'static' ? staticMinutes * 60 : rotationSeconds,
       declaredDisplayCount: displayCount,
       roomLat: room?.lat ?? null,
@@ -105,7 +145,7 @@ export default function SessionControl({
   }
 
   async function generateLink() {
-    const issued = await post(`/api/sessions/${sessionId}/display-token`, 'POST')
+    const issued = await post(`/api/sessions/${sessionId}/display-token`, 'POST', 'generate')
     if (issued) {
       setDisplayLink(`${window.location.origin}/display/${sessionId}?dt=${issued.token}`)
       setCopied(false)
@@ -113,14 +153,30 @@ export default function SessionControl({
   }
 
   async function revokeLinks() {
-    if (await post(`/api/sessions/${sessionId}/display-token`, 'DELETE')) setDisplayLink(null)
+    if (await post(`/api/sessions/${sessionId}/display-token`, 'DELETE', 'revoke')) {
+      setDisplayLink(null)
+      setRevokeOpen(false)
+    }
   }
 
   async function endSession() {
-    if (await post(`/api/sessions/${sessionId}/end`, 'POST')) {
+    if (await post(`/api/sessions/${sessionId}/end`, 'POST', 'end')) {
       setDisplayLink(null)
       setStats(null)
+      setEndOpen(false)
       router.refresh()
+    }
+  }
+
+  async function copyLink() {
+    if (!displayLink) return
+    try {
+      await navigator.clipboard.writeText(displayLink)
+      setCopied(true)
+      if (copyResetRef.current) clearTimeout(copyResetRef.current)
+      copyResetRef.current = setTimeout(() => setCopied(false), 2000)
+    } catch {
+      setError('clipboard_unavailable')
     }
   }
 
@@ -143,21 +199,30 @@ export default function SessionControl({
       </div>
 
       {error && (
-        <p className="mb-4 rounded-md border border-destructive px-3 py-2 text-sm text-destructive">
-          {error}
+        <p
+          role="alert"
+          className="mb-4 rounded-md border border-destructive px-3 py-2 text-sm text-destructive"
+        >
+          {errorLabels[error] ?? 'Something went wrong. Try again.'}
         </p>
       )}
 
       {!openSession ? (
-        <div className="rounded-lg border border-border bg-card p-5">
+        <div className="animate-in fade-in-0 rounded-lg border border-border bg-card p-5 duration-150">
           <p className="meta">Start a session</p>
 
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <label className="block">
               <span className="text-sm text-muted-foreground">QR mode</span>
-              <div className="mt-1.5 inline-flex rounded-md border border-input p-1">
+              <div
+                className="mt-1.5 inline-flex rounded-md border border-input p-1"
+                role="radiogroup"
+                aria-label="QR mode"
+              >
                 <button
                   type="button"
+                  role="radio"
+                  aria-checked={qrMode === 'rotating'}
                   onClick={() => setQrMode('rotating')}
                   className={
                     qrMode === 'rotating'
@@ -169,6 +234,8 @@ export default function SessionControl({
                 </button>
                 <button
                   type="button"
+                  role="radio"
+                  aria-checked={qrMode === 'static'}
                   onClick={() => setQrMode('static')}
                   className={
                     qrMode === 'static'
@@ -237,11 +304,12 @@ export default function SessionControl({
           </div>
 
           <Button size="lg" className="mt-6 h-12 w-full text-base sm:w-auto sm:px-8" disabled={busy} onClick={start}>
-            Start session
+            {busyAction === 'start' && <Spinner />}
+            {busyAction === 'start' ? 'Starting session…' : 'Start session'}
           </Button>
         </div>
       ) : (
-        <>
+        <div className="animate-in fade-in-0 duration-150">
           <div className="grid gap-3 sm:grid-cols-3">
             <Tile
               label="Marked present"
@@ -251,7 +319,13 @@ export default function SessionControl({
             <Tile
               label="Active displays"
               value={stats ? `${stats.activeDisplays}` : '—'}
-              note={stats ? `${stats.declaredDisplayCount} declared` : ' '}
+              note={
+                stats
+                  ? stats.activeDisplays > stats.declaredDisplayCount
+                    ? `${stats.activeDisplays - stats.declaredDisplayCount} more than declared`
+                    : `${stats.declaredDisplayCount} declared`
+                  : ' '
+              }
               // More screens polling than the room has is the signal that a
               // display link left the podium. It is meant to be visible, not
               // buried in an audit table nobody opens mid-lecture.
@@ -281,10 +355,7 @@ export default function SessionControl({
                   <div className="mt-3 flex flex-wrap gap-3">
                     <Button
                       variant="outline"
-                      onClick={() => {
-                        navigator.clipboard.writeText(displayLink)
-                        setCopied(true)
-                      }}
+                      onClick={copyLink}
                     >
                       <Copy />
                       {copied ? 'Copied' : 'Copy link'}
@@ -299,18 +370,38 @@ export default function SessionControl({
                 </>
               ) : (
                 <Button className="mt-4" disabled={busy} onClick={generateLink}>
-                  Generate projector link
+                  {busyAction === 'generate' && <Spinner />}
+                  {busyAction === 'generate' ? 'Generating link…' : 'Generate projector link'}
                 </Button>
               )}
 
-              <button
-                type="button"
-                disabled={busy}
-                onClick={revokeLinks}
-                className="mt-4 block text-sm text-primary underline underline-offset-4"
-              >
-                Revoke every link for this session
-              </button>
+              <Dialog open={revokeOpen} onOpenChange={(open) => !busy && setRevokeOpen(open)}>
+                <DialogTrigger asChild>
+                  <Button variant="destructive" className="mt-4" disabled={busy}>
+                    Revoke every link
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Revoke every projector link?</DialogTitle>
+                    <DialogDescription>
+                      Every display showing {courseCode} will stop immediately. You can generate a
+                      new link afterwards.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter>
+                    <DialogClose asChild>
+                      <Button variant="outline" disabled={busy}>
+                        Cancel
+                      </Button>
+                    </DialogClose>
+                    <Button variant="destructive" onClick={revokeLinks} disabled={busy}>
+                      {busyAction === 'revoke' && <Spinner />}
+                      {busyAction === 'revoke' ? 'Revoking…' : 'Revoke every link'}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </div>
 
             <div className="rounded-lg border border-border bg-card p-5">
@@ -333,16 +424,40 @@ export default function SessionControl({
             </div>
           </div>
 
-          <Button
-            variant="destructive"
-            size="lg"
-            className="mt-6 h-12 w-full text-base sm:w-auto sm:px-8"
-            disabled={busy}
-            onClick={endSession}
-          >
-            End session
-          </Button>
-        </>
+          <Dialog open={endOpen} onOpenChange={(open) => !busy && setEndOpen(open)}>
+            <DialogTrigger asChild>
+              <Button
+                variant="destructive"
+                size="lg"
+                className="mt-6 h-12 w-full text-base sm:w-auto sm:px-8"
+                disabled={busy}
+              >
+                End session
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>End attendance for {courseCode}?</DialogTitle>
+                <DialogDescription>
+                  {stats ? `${stats.marked} of ${stats.roster} students have marked. ` : ''}
+                  Students still waiting will no longer be able to scan, and this session cannot
+                  be reopened.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button variant="outline" disabled={busy}>
+                    Keep session open
+                  </Button>
+                </DialogClose>
+                <Button variant="destructive" onClick={endSession} disabled={busy}>
+                  {busyAction === 'end' && <Spinner />}
+                  {busyAction === 'end' ? 'Ending session…' : 'End session'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       )}
     </>
   )
@@ -363,7 +478,7 @@ function Tile({
     <div className="rounded-lg border border-border bg-card p-5">
       <p className="meta">{label}</p>
       <p
-        className="mt-2 font-[family-name:var(--heading)] text-4xl font-extrabold tracking-[-1.2px] text-card-foreground"
+        className="stat mt-2"
         style={alert ? { color: 'var(--status-flagged)' } : undefined}
       >
         {value}

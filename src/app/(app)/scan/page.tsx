@@ -67,7 +67,7 @@ export default async function ScanPage({
             <Link
               key={s.id}
               href={`/scan?session=${s.id}`}
-              className="rounded-lg border border-border bg-card p-5 hover:border-primary"
+              className="rounded-lg border border-border bg-card p-5 transition-colors duration-150 hover:border-primary"
             >
               <p className="font-mono text-sm font-medium text-card-foreground">{s.code}</p>
               <p className="mt-0.5 text-sm text-muted-foreground">{s.title}</p>

@@ -81,7 +81,7 @@ async function StudentHome({ email }: { email: string }) {
       </div>
 
       {live.length > 0 && (
-        <div className="mb-6 rounded-lg border border-border bg-card p-5">
+        <div className="mb-6 rounded-lg border border-border bg-card p-5 shadow-[var(--shadow)]">
           <div className="flex items-center gap-3">
             <StatusChip tone="live">Taking attendance</StatusChip>
             <span className="text-sm text-muted-foreground">
@@ -102,8 +102,8 @@ async function StudentHome({ email }: { email: string }) {
           const present = attendedByCourse.get(course.id) ?? 0
           const percent = total ? Math.round((present / total) * 100) : null
 
-          return (
-            <div key={course.id} className="rounded-lg border border-border bg-card p-6">
+          const card = (
+            <>
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="font-mono text-sm font-medium text-card-foreground">{course.code}</p>
@@ -112,12 +112,27 @@ async function StudentHome({ email }: { email: string }) {
                 {liveByCourse.has(course.id) && <StatusChip tone="live">Live</StatusChip>}
               </div>
 
-              <p className="mt-4 font-[family-name:var(--heading)] text-3xl font-extrabold tracking-[-0.9px] text-card-foreground">
+              <p className="stat mt-4">
                 {percent === null ? '—' : `${percent}%`}
               </p>
               <p className="meta mt-1">
                 {total ? `${present} of ${total} classes` : 'No classes held yet'}
               </p>
+            </>
+          )
+
+          const liveSessionId = liveByCourse.get(course.id)
+          return liveSessionId ? (
+            <Link
+              key={course.id}
+              href={`/scan?session=${liveSessionId}`}
+              className="rounded-lg border border-border bg-card p-6 transition-colors duration-150 hover:border-primary"
+            >
+              {card}
+            </Link>
+          ) : (
+            <div key={course.id} className="rounded-lg border border-border bg-card p-6">
+              {card}
             </div>
           )
         })}
@@ -172,7 +187,7 @@ async function FacultyHome({ email }: { email: string }) {
           <Link
             key={course.id}
             href={`/courses/${course.id}/session`}
-            className="rounded-lg border border-border bg-card p-6 hover:border-primary"
+            className="rounded-lg border border-border bg-card p-6 transition-colors duration-150 hover:border-primary"
           >
             <div className="flex items-start justify-between gap-3">
               <div>

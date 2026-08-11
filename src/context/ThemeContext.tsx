@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { themeColorFor } from '@/lib/theme'
 
 export type Mode = 'light' | 'dark'
 export type Palette = 'crimson' | 'navy' | 'amber' | 'sky'
@@ -38,7 +39,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [palette, setPalette] = useState<Palette>(readPalette)
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', `${palette}-${mode}`)
+    const theme = `${palette}-${mode}`
+    document.documentElement.setAttribute('data-theme', theme)
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColorFor(theme))
   }, [mode, palette])
 
   useEffect(() => {

@@ -2,19 +2,17 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { House, LogOut, QrCode } from 'lucide-react'
+import { LibraryBig, LogOut, QrCode } from 'lucide-react'
 import { signOutAndReturnToLogin } from '@/app/actions'
 import ThemeMenu from './ThemeMenu'
 import { Button } from '@/components/ui/button'
 
 export default function AppShell({
   name,
-  role,
   enrolled,
   children,
 }: {
   name: string
-  role: string
   enrolled: boolean
   children: React.ReactNode
 }) {
@@ -22,16 +20,20 @@ export default function AppShell({
 
   // Scan follows enrolment rather than role. Faculty enrolled in a course are
   // rare but real, and role alone would hide the only screen they need.
-  const nav = [{ href: '/', label: role === 'student' ? 'Home' : 'Courses', icon: House }]
+  const nav = [{ href: '/', label: 'Courses', icon: LibraryBig }]
   if (enrolled) nav.push({ href: '/scan', label: 'Scan', icon: QrCode })
 
   return (
     <>
-      <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
+      <header className="app-header sticky top-0 z-20 bg-background/80 shadow-sm backdrop-blur-xl">
         <div className="mx-auto flex min-h-16 w-full max-w-6xl items-center gap-3 px-4 py-2 sm:min-h-20 sm:px-6">
-          <span className="mr-3 font-[family-name:var(--heading)] text-[17px] font-extrabold tracking-[-0.5px] text-card-foreground">
+          <Link
+            href="/"
+            aria-label="Attendance courses"
+            className="mr-3 rounded-sm font-[family-name:var(--heading)] text-[17px] font-extrabold tracking-[-0.5px] text-card-foreground transition-opacity hover:opacity-75"
+          >
             Attendance
-          </span>
+          </Link>
 
           {nav.map((item) => {
             const active = pathname === item.href
@@ -39,10 +41,11 @@ export default function AppShell({
               <Link
                 key={item.href}
                 href={item.href}
+                aria-current={active ? 'page' : undefined}
                 className={
                   active
-                    ? 'flex items-center gap-1.5 rounded-md bg-accent px-3.5 py-2 text-sm font-bold text-accent-foreground'
-                    : 'flex items-center gap-1.5 rounded-md px-3.5 py-2 text-sm font-medium hover:bg-accent'
+                    ? 'flex items-center gap-1.5 rounded-md bg-accent px-3.5 py-2 text-sm font-bold text-accent-foreground transition-colors duration-150'
+                    : 'flex items-center gap-1.5 rounded-md px-3.5 py-2 text-sm font-medium transition-colors duration-150 hover:bg-accent'
                 }
               >
                 <item.icon size={16} />

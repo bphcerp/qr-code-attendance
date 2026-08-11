@@ -6,7 +6,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'crypto'
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
 
 const QR_TOKEN_LENGTH = 10
-const CODE_LENGTH = 6
+export const CODE_LENGTH = 6
 
 // How many rotations back a token still counts. QR gets one tick of slack
 // because a camera takes a moment to focus; the typed code gets two because

@@ -1,4 +1,7 @@
 @import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:where([data-theme$='-dark'] *));
 
 /* Ported from su-connect/src/index.css -- same four BITS-seal palettes, same
    data-theme mechanism, so the two apps read as siblings. One deliberate
@@ -18,18 +21,10 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-button:not(:disabled) {
-  transition: transform 0.1s ease-out;
-}
-
-button:active:not(:disabled) {
-  transform: scale(0.96);
-}
-
 :root {
   --text: oklch(48% 0.008 40);
   --text-h: oklch(19% 0.01 40);
-  --text-l: oklch(62% 0.008 40);
+  --text-l: oklch(52% 0.008 40);
   --bg: oklch(98% 0.004 40);
   --surface: oklch(100% 0 0);
   --border: oklch(90% 0.006 40);
@@ -37,11 +32,11 @@ button:active:not(:disabled) {
   --accent: oklch(48% 0.19 18);
   --accent-bg: oklch(93% 0.035 18);
   --accent-border: oklch(48% 0.19 18 / 0.5);
-  --status-submitted: oklch(60% 0.16 65);
+  --status-submitted: oklch(52% 0.16 65);
   --status-review: oklch(56% 0.16 255);
   --status-resolved: oklch(50% 0.14 150);
   --status-closed: oklch(52% 0.01 30);
-  --status-approved: #16a34a;
+  --status-approved: #15803d;
   --status-rejected: #dc2626;
   --shadow:
     rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
@@ -52,7 +47,7 @@ button:active:not(:disabled) {
 
   --radius: 10px;
 
-  font: 18px/145% var(--sans);
+  font: 112.5%/145% var(--sans);
   letter-spacing: 0.18px;
   color-scheme: light;
   color: var(--text);
@@ -63,7 +58,7 @@ button:active:not(:disabled) {
   -moz-osx-font-smoothing: grayscale;
 
   @media (max-width: 1024px) {
-    font-size: 16px;
+    font-size: 100%;
   }
 }
 
@@ -79,7 +74,7 @@ button:active:not(:disabled) {
   --accent-border: oklch(68% 0.17 18 / 0.5);
   --text-h: oklch(95% 0.004 40);
   --text: oklch(70% 0.008 40);
-  --text-l: oklch(58% 0.008 40);
+  --text-l: oklch(66% 0.008 40);
   --bg: oklch(19% 0.006 40);
   --border: oklch(31% 0.008 40);
   --surface: oklch(24% 0.008 40);
@@ -92,7 +87,7 @@ button:active:not(:disabled) {
   --accent-border: oklch(34% 0.15 265 / 0.5);
   --text-h: oklch(19% 0.01 265);
   --text: oklch(48% 0.01 265);
-  --text-l: oklch(62% 0.01 265);
+  --text-l: oklch(52% 0.01 265);
   --bg: oklch(98% 0.004 265);
   --border: oklch(90% 0.01 265);
   --surface: oklch(100% 0 0);
@@ -105,7 +100,7 @@ button:active:not(:disabled) {
   --accent-border: oklch(65% 0.14 265 / 0.5);
   --text-h: oklch(95% 0.005 265);
   --text: oklch(70% 0.012 265);
-  --text-l: oklch(58% 0.012 265);
+  --text-l: oklch(66% 0.012 265);
   --bg: oklch(19% 0.012 265);
   --border: oklch(30% 0.012 265);
   --surface: oklch(24% 0.014 265);
@@ -118,7 +113,7 @@ button:active:not(:disabled) {
   --accent-border: oklch(52% 0.17 55 / 0.5);
   --text-h: oklch(20% 0.015 50);
   --text: oklch(48% 0.012 50);
-  --text-l: oklch(62% 0.012 50);
+  --text-l: oklch(52% 0.012 50);
   --bg: oklch(98% 0.008 60);
   --border: oklch(90% 0.012 55);
   --surface: oklch(100% 0 0);
@@ -131,7 +126,7 @@ button:active:not(:disabled) {
   --accent-border: oklch(73% 0.16 60 / 0.5);
   --text-h: oklch(95% 0.006 50);
   --text: oklch(70% 0.012 50);
-  --text-l: oklch(58% 0.012 50);
+  --text-l: oklch(66% 0.012 50);
   --bg: oklch(19% 0.01 50);
   --border: oklch(31% 0.012 50);
   --surface: oklch(24% 0.012 50);
@@ -144,7 +139,7 @@ button:active:not(:disabled) {
   --accent-border: oklch(58% 0.13 230 / 0.5);
   --text-h: oklch(19% 0.012 230);
   --text: oklch(48% 0.01 230);
-  --text-l: oklch(62% 0.01 230);
+  --text-l: oklch(52% 0.01 230);
   --bg: oklch(98% 0.006 230);
   --border: oklch(90% 0.01 230);
   --surface: oklch(100% 0 0);
@@ -157,7 +152,7 @@ button:active:not(:disabled) {
   --accent-border: oklch(72% 0.13 230 / 0.5);
   --text-h: oklch(95% 0.005 230);
   --text: oklch(70% 0.012 230);
-  --text-l: oklch(58% 0.012 230);
+  --text-l: oklch(66% 0.012 230);
   --bg: oklch(19% 0.012 230);
   --border: oklch(30% 0.012 230);
   --surface: oklch(24% 0.014 230);
@@ -216,6 +211,47 @@ body {
   flex-direction: column;
 }
 
+:root,
+body {
+  transition:
+    background-color 160ms ease-out,
+    color 160ms ease-out;
+}
+
+:where(a, button, input, select, textarea, [role='button'], [role='radio']):focus-visible {
+  outline: 3px solid color-mix(in oklab, var(--accent) 50%, transparent);
+  outline-offset: 2px;
+}
+
+.app-header::after {
+  position: absolute;
+  right: 0;
+  bottom: -12px;
+  left: 0;
+  height: 12px;
+  pointer-events: none;
+  content: '';
+  background: linear-gradient(to bottom, color-mix(in oklab, var(--bg) 35%, transparent), transparent);
+}
+
+.scan-reticle {
+  position: absolute;
+  inset: 15%;
+  border: 2px solid rgb(255 255 255 / 0.85);
+  border-radius: 18px;
+  box-shadow: 0 0 0 999px rgb(0 0 0 / 0.18);
+  transition:
+    border-color 120ms ease-out,
+    box-shadow 120ms ease-out;
+}
+
+.scan-reticle[data-detected='true'] {
+  border-color: #22c55e;
+  box-shadow:
+    0 0 0 999px rgb(0 0 0 / 0.28),
+    0 0 24px rgb(34 197 94 / 0.65);
+}
+
 h1,
 h2 {
   font-family: var(--heading);
@@ -224,22 +260,23 @@ h2 {
 }
 
 h1 {
-  font-size: 56px;
+  font-size: 3.111rem;
+  line-height: 1.05;
   letter-spacing: -1.68px;
   margin: 32px 0;
   @media (max-width: 1024px) {
-    font-size: 36px;
+    font-size: 2.25rem;
     margin: 20px 0;
   }
 }
 
 h2 {
-  font-size: 24px;
+  font-size: 1.333rem;
   line-height: 118%;
   letter-spacing: -0.24px;
   margin: 0 0 8px;
   @media (max-width: 1024px) {
-    font-size: 20px;
+    font-size: 1.25rem;
   }
 }
 
@@ -255,19 +292,20 @@ p {
   font-family: var(--heading);
   font-weight: 800;
   color: var(--text-h);
-  font-size: 32px;
+  font-size: 1.778rem;
+  line-height: 1.08;
   letter-spacing: -0.96px;
   margin: 0;
 
   @media (max-width: 1024px) {
-    font-size: 26px;
+    font-size: 1.625rem;
     letter-spacing: -0.78px;
   }
 }
 
 .meta {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 0.75rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-l);
@@ -275,7 +313,7 @@ p {
 
 .meta-lg {
   font-family: var(--mono);
-  font-size: 14px;
+  font-size: 0.875rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-l);
@@ -290,10 +328,54 @@ code,
 }
 
 code {
-  font-size: 15px;
+  font-size: 0.938rem;
   line-height: 135%;
   padding: 4px 8px;
   background: var(--code-bg);
+}
+
+.stat {
+  font-family: var(--heading);
+  font-size: 2.25rem;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.033em;
+  color: var(--text-h);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root,
+  body,
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+
+  .animate-pulse {
+    animation: none !important;
+    opacity: 0.7;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .app-header {
+    background: var(--bg) !important;
+    backdrop-filter: none !important;
+  }
+
+  .app-header::after {
+    display: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --border: color-mix(in oklab, var(--text-h) 42%, var(--bg));
+  }
 }
 
 /* The projector route opts out of theming entirely -- a tinted QR loses contrast

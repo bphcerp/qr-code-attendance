@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { auth } from '@/lib/auth'
 import { signInWithGoogle } from '@/app/actions'
-import { Button } from '@/components/ui/button'
+import LoginSubmit from '@/components/LoginSubmit'
 
 const domains = (process.env.ALLOWED_EMAIL_DOMAINS ?? '')
   .split(',')
@@ -19,9 +19,7 @@ export default async function LoginPage() {
         <p className="mt-2 mb-6">Sign in with your BITS Google account.</p>
 
         <form action={signInWithGoogle}>
-          <Button type="submit" size="lg" className="h-12 w-full text-base">
-            Continue with Google
-          </Button>
+          <LoginSubmit />
         </form>
 
         <p className="mt-4 text-sm text-muted-foreground">

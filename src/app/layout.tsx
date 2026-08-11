@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Montserrat, Manrope, IBM_Plex_Mono } from 'next/font/google'
 import { ThemeProvider } from '@/context/ThemeContext'
+import { THEME_COLORS } from '@/lib/theme'
 import './globals.css'
 
 const montserrat = Montserrat({
@@ -29,7 +30,6 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   viewportFit: 'cover',
-  themeColor: '#b45309',
 }
 
 // SU Connect sets data-theme in a useEffect, which is fine for a client-only
@@ -42,7 +42,11 @@ try {
   var p = localStorage.getItem('theme-palette');
   if (m !== 'light' && m !== 'dark') m = 'light';
   if (['crimson','navy','amber','sky'].indexOf(p) === -1) p = 'amber';
-  document.documentElement.setAttribute('data-theme', p + '-' + m);
+  var t = p + '-' + m;
+  var colors = ${JSON.stringify(THEME_COLORS)};
+  document.documentElement.setAttribute('data-theme', t);
+  var meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', colors[t] || colors['amber-light']);
 } catch (e) {}
 `
 
@@ -54,6 +58,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       className={`${montserrat.variable} ${manrope.variable} ${plexMono.variable}`}
     >
       <head>
+        <meta name="theme-color" content={THEME_COLORS['amber-light']} />
         <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
       </head>
       <body>
