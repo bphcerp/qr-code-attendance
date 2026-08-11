@@ -21,16 +21,17 @@ export async function POST(_req: Request, { params }: { params: Promise<{ sessio
 
     // Display tokens outliving their session would keep a projector rendering
     // codes for a class that has finished.
-    await db
-      .update(displayTokens)
-      .set({ revokedAt: endedAt })
-      .where(and(eq(displayTokens.sessionId, sessionId), isNull(displayTokens.revokedAt)))
-
-    await db.insert(auditLog).values({
-      actorEmail: email,
-      action: 'session.end',
-      subject: sessionId,
-    })
+    await Promise.all([
+      db
+        .update(displayTokens)
+        .set({ revokedAt: endedAt })
+        .where(and(eq(displayTokens.sessionId, sessionId), isNull(displayTokens.revokedAt))),
+      db.insert(auditLog).values({
+        actorEmail: email,
+        action: 'session.end',
+        subject: sessionId,
+      }),
+    ])
 
     return Response.json({ ok: true, endedAt: endedAt.toISOString() })
   } catch (err) {

@@ -103,7 +103,7 @@ export default function ProjectorDisplay({
       <div
         className={
           variant === 'embedded'
-            ? 'flex min-h-80 flex-col items-center justify-center gap-3 rounded-lg bg-white p-6 text-center'
+            ? 'flex min-h-[min(68vh,640px)] flex-col items-center justify-center gap-3 rounded-lg bg-white p-6 text-center'
             : 'flex min-h-screen flex-col items-center justify-center gap-4 bg-white p-8 text-center'
         }
       >
@@ -139,7 +139,7 @@ export default function ProjectorDisplay({
       <div
         className={
           variant === 'embedded'
-            ? 'flex min-h-80 items-center justify-center rounded-lg bg-white'
+            ? 'flex min-h-[min(68vh,640px)] items-center justify-center rounded-lg bg-white'
             : 'flex min-h-screen items-center justify-center bg-white'
         }
       >
@@ -160,16 +160,16 @@ export default function ProjectorDisplay({
 
   if (variant === 'embedded') {
     return (
-      <div className="flex min-h-80 flex-col items-center justify-center gap-4 rounded-lg bg-white p-5">
+      <div className="flex min-h-[min(68vh,640px)] flex-col items-center justify-center gap-6 rounded-lg bg-white p-4 sm:p-6">
         <div
-          className="aspect-square w-full max-w-72 [&>svg]:h-full [&>svg]:w-full"
+          className="aspect-square w-full max-w-[34rem] [&>svg]:h-full [&>svg]:w-full"
           dangerouslySetInnerHTML={{ __html: svg }}
         />
         <div className="text-center">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-neutral-500">
+          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-neutral-500">
             Can&rsquo;t scan? Enter this code
           </p>
-          <p className="mt-1 font-mono text-5xl font-semibold leading-none tracking-[0.08em] text-black">
+          <p className="mt-2 font-mono text-6xl font-semibold leading-none tracking-[0.08em] text-black sm:text-7xl">
             {payload.code}
           </p>
         </div>

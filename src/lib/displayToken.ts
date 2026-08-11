@@ -20,33 +20,35 @@ export async function issueDisplayToken(sessionId: string, issuedByEmail: string
   const token = randomBytes(24).toString('base64url')
   const expiresAt = new Date(Date.now() + DEFAULT_TTL_HOURS * 3600 * 1000)
 
-  await db.insert(displayTokens).values({
-    sessionId,
-    tokenHash: hash(token),
-    issuedByEmail,
-    expiresAt,
-  })
-
-  await db.insert(auditLog).values({
-    actorEmail: issuedByEmail,
-    action: 'display_token.issue',
-    subject: sessionId,
-  })
+  await Promise.all([
+    db.insert(displayTokens).values({
+      sessionId,
+      tokenHash: hash(token),
+      issuedByEmail,
+      expiresAt,
+    }),
+    db.insert(auditLog).values({
+      actorEmail: issuedByEmail,
+      action: 'display_token.issue',
+      subject: sessionId,
+    }),
+  ])
 
   return { token, expiresAt }
 }
 
 export async function revokeDisplayTokens(sessionId: string, actorEmail: string) {
-  await db
-    .update(displayTokens)
-    .set({ revokedAt: new Date() })
-    .where(and(eq(displayTokens.sessionId, sessionId), isNull(displayTokens.revokedAt)))
-
-  await db.insert(auditLog).values({
-    actorEmail,
-    action: 'display_token.revoke',
-    subject: sessionId,
-  })
+  await Promise.all([
+    db
+      .update(displayTokens)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(displayTokens.sessionId, sessionId), isNull(displayTokens.revokedAt))),
+    db.insert(auditLog).values({
+      actorEmail,
+      action: 'display_token.revoke',
+      subject: sessionId,
+    }),
+  ])
 }
 
 type DisplayTokenRow = typeof displayTokens.$inferSelect

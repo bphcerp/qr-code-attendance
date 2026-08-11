@@ -4,10 +4,11 @@ import {
   attendanceFlags,
   attendanceRecords,
   classSessions,
+  courses,
   enrollments,
   users,
 } from '@/db/schema'
-import { errorResponse, requireCourseAccess, requireUser, HttpError } from '@/lib/guards'
+import { errorResponse, requireRole, HttpError } from '@/lib/guards'
 import { activeDisplayCount } from '@/lib/displayToken'
 
 export const dynamic = 'force-dynamic'
@@ -23,27 +24,25 @@ export async function GET(_req: Request, { params }: { params: Promise<{ session
 
     // Authenticate before the lookup, so a signed-out caller can't tell a real
     // session id from a made-up one by the difference between 404 and 403.
-    await requireUser()
+    const { email, role } = await requireRole('faculty', 'admin')
 
     const [session] = await db
       .select({
         courseId: classSessions.courseId,
+        facultyEmail: courses.facultyEmail,
         startedAt: classSessions.startedAt,
         endedAt: classSessions.endedAt,
         declaredDisplayCount: classSessions.declaredDisplayCount,
       })
       .from(classSessions)
+      .innerJoin(courses, eq(courses.id, classSessions.courseId))
       .where(eq(classSessions.id, sessionId))
     if (!session) throw new HttpError(404, 'not_found')
+    if (role !== 'admin' && session.facultyEmail.toLowerCase() !== email) {
+      throw new HttpError(403, 'forbidden')
+    }
 
-    await requireCourseAccess(session.courseId)
-
-    const [bySource, students, flags, activeDisplays] = await Promise.all([
-      db
-        .select({ source: attendanceRecords.source, n: count() })
-        .from(attendanceRecords)
-        .where(eq(attendanceRecords.sessionId, sessionId))
-        .groupBy(attendanceRecords.source),
+    const [students, flags, activeDisplays] = await Promise.all([
       db
         .select({
           email: enrollments.studentEmail,
@@ -60,7 +59,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ session
             eq(attendanceRecords.studentEmail, enrollments.studentEmail),
           ),
         )
-        .where(eq(enrollments.courseId, session.courseId)),
+        .where(eq(enrollments.courseId, session.courseId))
+        .orderBy(users.name, users.email),
       db
         .select({ kind: attendanceFlags.kind, n: count() })
         .from(attendanceFlags)
@@ -70,13 +70,22 @@ export async function GET(_req: Request, { params }: { params: Promise<{ session
       activeDisplayCount(sessionId),
     ])
 
+    // The roster rows already carry attendance source, so derive the summary
+    // here instead of making Postgres scan attendance_records a second time.
+    const bySource: Record<string, number> = {}
+    let marked = 0
+    for (const student of students) {
+      if (!student.source) continue
+      marked++
+      bySource[student.source] = (bySource[student.source] ?? 0) + 1
+    }
+
     return Response.json(
       {
-        marked: bySource.reduce((total, row) => total + row.n, 0),
+        marked,
         roster: students.length,
-        bySource: Object.fromEntries(bySource.map((row) => [row.source, row.n])),
+        bySource,
         students: students
-          .sort((a, b) => a.name.localeCompare(b.name) || a.email.localeCompare(b.email))
           .map((student) => ({
             email: student.email,
             name: student.name,

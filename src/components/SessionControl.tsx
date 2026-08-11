@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { MapPin, RefreshCw, Search } from 'lucide-react'
 import ProjectorDisplay from './ProjectorDisplay'
 import StatusChip from './StatusChip'
@@ -63,6 +62,12 @@ const errorLabels: Record<string, string> = {
   session_already_open: 'This course already has a live attendance session.',
 }
 
+const timestampFormatter = new Intl.DateTimeFormat('en-IN', {
+  dateStyle: 'medium',
+  timeStyle: 'medium',
+  timeZone: 'Asia/Kolkata',
+})
+
 type BusyAction = 'start' | 'generate' | 'revoke' | 'end'
 
 export default function SessionControl({
@@ -76,7 +81,7 @@ export default function SessionControl({
   courseTitle: string
   openSession: OpenSession | null
 }) {
-  const router = useRouter()
+  const [activeSession, setActiveSession] = useState<OpenSession | null>(openSession)
   const [busyAction, setBusyAction] = useState<BusyAction | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [revokeOpen, setRevokeOpen] = useState(false)
@@ -89,7 +94,7 @@ export default function SessionControl({
   const [stats, setStats] = useState<Stats | null>(null)
   const [studentQuery, setStudentQuery] = useState('')
 
-  const sessionId = openSession?.id
+  const sessionId = activeSession?.id
   const busy = busyAction !== null
   const visibleStudents = useMemo(() => {
     if (!stats) return []
@@ -104,22 +109,44 @@ export default function SessionControl({
   useEffect(() => {
     if (!sessionId) return
     let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let controller: AbortController | undefined
+    let pollRun = 0
 
     const poll = async () => {
+      if (cancelled || document.visibilityState === 'hidden') return
+      const run = ++pollRun
+      controller = new AbortController()
       try {
-        const res = await fetch(`/api/sessions/${sessionId}/stats`, { cache: 'no-store' })
+        const res = await fetch(`/api/sessions/${sessionId}/stats`, {
+          cache: 'no-store',
+          signal: controller.signal,
+        })
         if (cancelled || !res.ok) return
         setStats(await res.json())
       } catch {
         // A later poll can recover from a brief classroom Wi-Fi interruption.
+      } finally {
+        if (!cancelled && run === pollRun && document.visibilityState === 'visible') {
+          timer = setTimeout(poll, 5000)
+        }
       }
     }
 
+    const onVisibilityChange = () => {
+      pollRun++
+      if (timer) clearTimeout(timer)
+      controller?.abort()
+      if (document.visibilityState === 'visible') poll()
+    }
+
     poll()
-    const timer = setInterval(poll, 5000)
+    document.addEventListener('visibilitychange', onVisibilityChange)
     return () => {
       cancelled = true
-      clearInterval(timer)
+      if (timer) clearTimeout(timer)
+      controller?.abort()
+      document.removeEventListener('visibilitychange', onVisibilityChange)
     }
   }, [sessionId])
 
@@ -163,7 +190,14 @@ export default function SessionControl({
     })
     if (created) {
       sessionStorage.setItem(displayStorageKey(created.id), created.displayToken)
-      router.refresh()
+      setDisplayToken(created.displayToken)
+      setStats(null)
+      setActiveSession({
+        id: created.id,
+        startedAt: created.startedAt,
+        rotationSeconds: qrMode === 'static' ? staticMinutes * 60 : rotationSeconds,
+        declaredDisplayCount: 1,
+      })
     }
   }
 
@@ -189,7 +223,7 @@ export default function SessionControl({
       if (sessionId) sessionStorage.removeItem(displayStorageKey(sessionId))
       setStats(null)
       setEndOpen(false)
-      router.refresh()
+      setActiveSession(null)
     }
   }
 
@@ -207,15 +241,15 @@ export default function SessionControl({
         <div>
           <div className="flex items-center gap-3">
             <h1 className="page-title">{courseCode}</h1>
-            {openSession && <StatusChip tone="live">Live</StatusChip>}
+            {activeSession && <StatusChip tone="live">Live</StatusChip>}
           </div>
           <p className="mt-1 text-muted-foreground">{courseTitle}</p>
-          {openSession && (
-            <p className="meta mt-2">Started {formatTimestamp(openSession.startedAt)}</p>
+          {activeSession && (
+            <p className="meta mt-2">Started {formatTimestamp(activeSession.startedAt)}</p>
           )}
         </div>
 
-        {openSession && (
+        {activeSession && (
           <EndSessionDialog
             courseCode={courseCode}
             busy={busy}
@@ -238,7 +272,7 @@ export default function SessionControl({
         </p>
       )}
 
-      {!openSession ? (
+      {!activeSession ? (
         <div className="animate-in fade-in-0 rounded-lg border border-border bg-card p-5 duration-150 sm:p-6">
           <div>
             <p className="text-lg font-bold text-card-foreground">Start attendance</p>
@@ -341,32 +375,16 @@ export default function SessionControl({
         </div>
       ) : (
         <div className="animate-in fade-in-0 duration-150">
-          <div className="grid gap-3 sm:grid-cols-3" aria-busy={stats === null}>
-            <Tile
-              label="Present"
-              value={stats ? `${stats.marked}` : null}
-              note={stats ? `of ${stats.roster} students` : undefined}
-            />
-            <Tile
-              label="Waiting"
-              value={stats ? `${Math.max(0, stats.roster - stats.marked)}` : null}
-              note="Not marked yet"
-            />
-            <Tile
-              label="Attendance"
-              value={stats ? `${stats.roster ? Math.round((stats.marked / stats.roster) * 100) : 0}%` : null}
-              note={stats ? `${stats.bySource.qr ?? 0} QR · ${stats.bySource.code ?? 0} code` : undefined}
-            />
-          </div>
-
-          <div className="mt-4 grid items-start gap-4 xl:grid-cols-5">
-            <div className="space-y-4 xl:sticky xl:top-24 xl:col-span-2">
-              <section className="rounded-lg border border-border bg-card p-4 shadow-[var(--shadow)]">
+          <div className="space-y-4">
+            <div className="space-y-4">
+              <section className="rounded-xl border border-border bg-card p-4 shadow-[var(--shadow)] sm:p-6">
                 <div className="mb-4 flex items-start justify-between gap-3">
                   <div>
-                    <p className="font-bold text-card-foreground">Attendance QR</p>
+                    <h2 className="text-xl font-extrabold text-card-foreground">
+                      Scan to mark attendance
+                    </h2>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      Shown on this page—no new tab or link needed.
+                      The QR updates securely on this page—no new tab or link needed.
                     </p>
                   </div>
                   {displayToken && <StatusChip tone="live">On</StatusChip>}
@@ -374,12 +392,12 @@ export default function SessionControl({
 
                 {displayToken ? (
                   <ProjectorDisplay
-                    sessionId={openSession.id}
+                    sessionId={activeSession.id}
                     displayToken={displayToken}
                     variant="embedded"
                   />
                 ) : (
-                  <div className="flex min-h-80 flex-col items-center justify-center rounded-lg border border-dashed border-border bg-muted/40 p-6 text-center">
+                  <div className="flex min-h-[min(68vh,640px)] flex-col items-center justify-center rounded-lg border border-dashed border-border bg-muted/40 p-6 text-center">
                     <p className="font-medium text-card-foreground">Display is off</p>
                     <p className="mt-1 max-w-xs text-sm text-muted-foreground">
                       Show the secure QR right here when the classroom is ready.
@@ -425,6 +443,24 @@ export default function SessionControl({
                 </div>
               </section>
 
+              <div className="grid gap-3 sm:grid-cols-3" aria-busy={stats === null}>
+                <Tile
+                  label="Present"
+                  value={stats ? `${stats.marked}` : null}
+                  note={stats ? `of ${stats.roster} students` : undefined}
+                />
+                <Tile
+                  label="Waiting"
+                  value={stats ? `${Math.max(0, stats.roster - stats.marked)}` : null}
+                  note="Not marked yet"
+                />
+                <Tile
+                  label="Attendance"
+                  value={stats ? `${stats.roster ? Math.round((stats.marked / stats.roster) * 100) : 0}%` : null}
+                  note={stats ? `${stats.bySource.qr ?? 0} QR · ${stats.bySource.code ?? 0} code` : undefined}
+                />
+              </div>
+
               <section className="rounded-lg border border-border bg-card p-5">
                 <p className="font-bold text-card-foreground">Review flags</p>
                 {stats && stats.flags.some((flag) => flagLabels[flag.kind]) ? (
@@ -445,7 +481,7 @@ export default function SessionControl({
               </section>
             </div>
 
-            <section className="overflow-hidden rounded-lg border border-border bg-card xl:col-span-3">
+            <section className="overflow-hidden rounded-lg border border-border bg-card">
               <div className="border-b border-border p-4 sm:flex sm:items-center sm:justify-between sm:gap-4">
                 <div>
                   <h2 className="font-bold text-card-foreground">Student timestamps</h2>
@@ -600,8 +636,5 @@ function displayStorageKey(sessionId: string) {
 }
 
 function formatTimestamp(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'medium',
-  }).format(new Date(value))
+  return timestampFormatter.format(new Date(value))
 }
