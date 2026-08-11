@@ -310,21 +310,21 @@ export default function SessionControl({
         </div>
       ) : (
         <div className="animate-in fade-in-0 duration-150">
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-3" aria-busy={stats === null}>
             <Tile
               label="Marked present"
-              value={stats ? `${stats.marked}` : '—'}
-              note={stats ? `of ${stats.roster} enrolled` : ' '}
+              value={stats ? `${stats.marked}` : null}
+              note={stats ? `of ${stats.roster} enrolled` : undefined}
             />
             <Tile
               label="Active displays"
-              value={stats ? `${stats.activeDisplays}` : '—'}
+              value={stats ? `${stats.activeDisplays}` : null}
               note={
                 stats
                   ? stats.activeDisplays > stats.declaredDisplayCount
                     ? `${stats.activeDisplays - stats.declaredDisplayCount} more than declared`
                     : `${stats.declaredDisplayCount} declared`
-                  : ' '
+                  : undefined
               }
               // More screens polling than the room has is the signal that a
               // display link left the podium. It is meant to be visible, not
@@ -333,8 +333,8 @@ export default function SessionControl({
             />
             <Tile
               label="Typed the code"
-              value={stats ? `${stats.bySource.code ?? 0}` : '—'}
-              note={stats ? `${stats.bySource.qr ?? 0} scanned the QR` : ' '}
+              value={stats ? `${stats.bySource.code ?? 0}` : null}
+              note={stats ? `${stats.bySource.qr ?? 0} scanned the QR` : undefined}
             />
           </div>
 
@@ -470,20 +470,32 @@ function Tile({
   alert,
 }: {
   label: string
-  value: string
-  note: string
+  value: string | null
+  note?: string
   alert?: boolean
 }) {
   return (
-    <div className="rounded-lg border border-border bg-card p-5">
+    <div
+      className="rounded-lg border border-border bg-card p-5"
+      aria-label={value === null ? `${label} loading` : undefined}
+    >
       <p className="meta">{label}</p>
-      <p
-        className="stat mt-2"
-        style={alert ? { color: 'var(--status-flagged)' } : undefined}
-      >
-        {value}
-      </p>
-      <p className="meta mt-1">{note}</p>
+      {value === null ? (
+        <div aria-hidden="true">
+          <div className="mt-3 h-9 w-14 animate-pulse rounded bg-muted" />
+          <div className="mt-2 h-3 w-24 animate-pulse rounded bg-muted" />
+        </div>
+      ) : (
+        <>
+          <p
+            className="stat mt-2"
+            style={alert ? { color: 'var(--status-flagged)' } : undefined}
+          >
+            {value}
+          </p>
+          <p className="meta mt-1">{note}</p>
+        </>
+      )}
     </div>
   )
 }

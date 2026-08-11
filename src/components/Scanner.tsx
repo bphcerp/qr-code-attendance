@@ -20,6 +20,20 @@ type Geo = { lat?: number; lng?: number; accuracy?: number; denied?: boolean }
 
 type ZoomRange = { min: number; max: number; step: number }
 
+function rubberband(value: number, min: number, max: number) {
+  const dimension = Math.max(max - min, 1)
+  const resistance = 0.18
+  if (value < min) {
+    const overshoot = min - value
+    return min - (overshoot * dimension * resistance) / (dimension + resistance * overshoot)
+  }
+  if (value > max) {
+    const overshoot = value - max
+    return max + (overshoot * dimension * resistance) / (dimension + resistance * overshoot)
+  }
+  return value
+}
+
 const failureLabels: Record<string, string> = {
   invalid_token: 'That code is not valid for this class. Point at the projector and try again.',
   token_expired: 'That code had already rotated. Try the one on screen now.',
@@ -60,6 +74,7 @@ export default function Scanner({
   const [zoomRange, setZoomRange] = useState<ZoomRange | null>(null)
   const [zoom, setZoom] = useState(1)
   const [cssZoom, setCssZoom] = useState(1)
+  const [pinching, setPinching] = useState(false)
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -179,15 +194,20 @@ export default function Scanner({
     track?.applyConstraints({ advanced: [{ zoom: value }] } as unknown as MediaTrackConstraints)
   }
 
-  function updateZoom(value: number) {
+  function updateZoom(value: number, allowRubberband = false) {
     if (zoomRange) {
       const next = Math.min(zoomRange.max, Math.max(zoomRange.min, value))
       setZoom(next)
       applyZoom(next)
+      const softened = allowRubberband
+        ? rubberband(value, zoomRange.min, zoomRange.max)
+        : next
+      const range = Math.max(zoomRange.max - zoomRange.min, 1)
+      setCssZoom(Math.min(1.04, Math.max(0.96, 1 + (softened - next) / (range * 4))))
       return
     }
 
-    setCssZoom(Math.min(3, Math.max(1, value)))
+    setCssZoom(allowRubberband ? rubberband(value, 1, 3) : Math.min(3, Math.max(1, value)))
   }
 
   function pointerDistance() {
@@ -199,6 +219,7 @@ export default function Scanner({
   function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     event.currentTarget.setPointerCapture(event.pointerId)
     pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
+    setPinching(true)
     if (pointersRef.current.size === 2) {
       pinchRef.current = {
         distance: pointerDistance(),
@@ -214,12 +235,17 @@ export default function Scanner({
 
     const range = zoomRange ? zoomRange.max - zoomRange.min : 2
     const delta = (pointerDistance() - pinchRef.current.distance) / event.currentTarget.clientWidth
-    updateZoom(pinchRef.current.zoom + delta * range)
+    updateZoom(pinchRef.current.zoom + delta * range, true)
   }
 
   function handlePointerEnd(event: ReactPointerEvent<HTMLDivElement>) {
     pointersRef.current.delete(event.pointerId)
     pinchRef.current = null
+    if (pointersRef.current.size === 0) {
+      setPinching(false)
+      if (zoomRange) setCssZoom(1)
+      else updateZoom(cssZoom)
+    }
   }
 
   function retry() {
@@ -282,7 +308,7 @@ export default function Scanner({
         <video
           ref={videoRef}
           aria-label={`Camera preview for scanning ${courseCode}`}
-          className="aspect-square w-full object-cover transition-transform duration-150"
+          className={`aspect-square w-full object-cover ${pinching ? '' : 'transition-transform duration-150'}`}
           style={{ transform: `scale(${cssZoom})` }}
           muted
           playsInline

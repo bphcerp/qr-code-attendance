@@ -5,6 +5,8 @@ import { db } from '@/db'
 import { attendanceRecords, classSessions, courses, enrollments } from '@/db/schema'
 import { auth } from '@/lib/auth'
 import { getCurrentUser } from '@/lib/currentUser'
+import { BookOpen, ClipboardList } from 'lucide-react'
+import EmptyState from '@/components/EmptyState'
 import StatusChip from '@/components/StatusChip'
 import { Button } from '@/components/ui/button'
 
@@ -35,9 +37,9 @@ async function StudentHome({ email }: { email: string }) {
         <div className="my-8">
           <h1 className="page-title">Your courses</h1>
         </div>
-        <p className="text-muted-foreground">
+        <EmptyState icon={BookOpen} title="No courses yet">
           You aren&rsquo;t enrolled in anything yet. Your instructor imports the roster.
-        </p>
+        </EmptyState>
       </>
     )
   }
@@ -96,7 +98,7 @@ async function StudentHome({ email }: { email: string }) {
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {enrolled.map((course) => {
           const total = heldByCourse.get(course.id) ?? 0
           const present = attendedByCourse.get(course.id) ?? 0
@@ -126,12 +128,12 @@ async function StudentHome({ email }: { email: string }) {
             <Link
               key={course.id}
               href={`/scan?session=${liveSessionId}`}
-              className="rounded-lg border border-border bg-card p-6 transition-colors duration-150 hover:border-primary"
+              className="rounded-lg border border-border bg-card p-5 transition-colors duration-150 hover:border-primary"
             >
               {card}
             </Link>
           ) : (
-            <div key={course.id} className="rounded-lg border border-border bg-card p-6">
+            <div key={course.id} className="rounded-lg border border-border bg-card p-5">
               {card}
             </div>
           )
@@ -154,7 +156,9 @@ async function FacultyHome({ email }: { email: string }) {
         <div className="my-8">
           <h1 className="page-title">Your courses</h1>
         </div>
-        <p className="text-muted-foreground">No courses are assigned to this account yet.</p>
+        <EmptyState icon={ClipboardList} title="No assigned courses">
+          No courses are assigned to this account yet. Ask an administrator to assign one.
+        </EmptyState>
       </>
     )
   }
@@ -182,12 +186,12 @@ async function FacultyHome({ email }: { email: string }) {
         <h1 className="page-title">Your courses</h1>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {mine.map((course) => (
           <Link
             key={course.id}
             href={`/courses/${course.id}/session`}
-            className="rounded-lg border border-border bg-card p-6 transition-colors duration-150 hover:border-primary"
+            className="rounded-lg border border-border bg-card p-5 transition-colors duration-150 hover:border-primary"
           >
             <div className="flex items-start justify-between gap-3">
               <div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import QRCode from 'qrcode'
+import Spinner from '@/components/ui/spinner'
 
 type Payload = {
   token: string
@@ -108,7 +109,13 @@ export default function ProjectorDisplay({
   if (!payload) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-white">
-        <p className="text-3xl text-neutral-500">Starting…</p>
+        <p
+          role="status"
+          aria-live="polite"
+          className="flex items-center gap-3 text-3xl text-neutral-600"
+        >
+          <Spinner className="size-8" /> Starting…
+        </p>
       </main>
     )
   }

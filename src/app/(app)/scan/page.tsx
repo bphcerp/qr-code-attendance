@@ -4,6 +4,8 @@ import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { db } from '@/db'
 import { classSessions, courses, enrollments } from '@/db/schema'
 import { auth } from '@/lib/auth'
+import { CalendarClock } from 'lucide-react'
+import EmptyState from '@/components/EmptyState'
 import Scanner from '@/components/Scanner'
 
 export const dynamic = 'force-dynamic'
@@ -47,9 +49,10 @@ export default async function ScanPage({
         <div className="my-8">
           <h1 className="page-title">Scan</h1>
         </div>
-        <p className="text-muted-foreground">
-          None of your classes is taking attendance right now.
-        </p>
+        <EmptyState icon={CalendarClock} title="No live attendance">
+          None of your classes is taking attendance right now. This page will be ready when an
+          instructor starts a session.
+        </EmptyState>
       </>
     )
   }
