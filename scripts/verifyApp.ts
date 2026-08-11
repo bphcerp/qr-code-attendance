@@ -133,6 +133,7 @@ async function main() {
   })
   const session = await started.json()
   check('faculty starts a session', started.status === 200 && Boolean(session.id))
+  check('new session includes its inline display token', Boolean(session.displayToken))
 
   const secondStart = await fetch(`${BASE}/api/courses/${course.id}/sessions`, {
     method: 'POST',
@@ -147,6 +148,18 @@ async function main() {
   check('stats report nobody marked yet', stats.marked === 0)
   check('stats carry the declared display count', stats.declaredDisplayCount === 2)
   check('no displays are live yet', stats.activeDisplays === 0)
+  check(
+    'stats include every student in name order',
+    stats.students?.length === 2 &&
+      stats.students[0].name === 'Student Sam' &&
+      stats.students[1].name === 'Student Sara',
+  )
+  check(
+    'unmarked students have no timestamp or source',
+    stats.students.every((student: { markedAt: string | null; source: string | null }) =>
+      student.markedAt === null && student.source === null,
+    ),
+  )
   check(
     "another faculty is refused the stats",
     (await get(`/api/sessions/${session.id}/stats`, otherCookie)).status === 403,
@@ -226,6 +239,18 @@ async function main() {
   check(
     'the first mark of a colliding pair is not retro-flagged',
     !kinds(STUDENT).includes('fingerprint_collision'),
+  )
+
+  const markedStats = await (await get(`/api/sessions/${session.id}/stats`, profCookie)).json()
+  check(
+    'student rows include their marked timestamps',
+    markedStats.students.every((student: { markedAt: string | null }) =>
+      Boolean(student.markedAt && !Number.isNaN(Date.parse(student.markedAt))),
+    ),
+  )
+  check(
+    'student rows include how attendance was marked',
+    markedStats.students.every((student: { source: string | null }) => student.source === 'qr'),
   )
 
   console.log('\nCleanup')

@@ -24,9 +24,11 @@ const errorLabels: Record<string, string> = {
 export default function ProjectorDisplay({
   sessionId,
   displayToken,
+  variant = 'fullscreen',
 }: {
   sessionId: string
   displayToken: string | null
+  variant?: 'fullscreen' | 'embedded'
 }) {
   const [payload, setPayload] = useState<Payload | null>(null)
   const [svg, setSvg] = useState<string>('')
@@ -98,25 +100,80 @@ export default function ProjectorDisplay({
 
   if (error) {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-white p-8 text-center">
-        <p className="text-5xl font-extrabold text-black">Display stopped</p>
-        <p className="text-2xl text-neutral-600">{errorLabels[error] ?? 'Something went wrong.'}</p>
-        <p className="text-xl text-neutral-500">Generate a new display link from the course page.</p>
-      </main>
+      <div
+        className={
+          variant === 'embedded'
+            ? 'flex min-h-80 flex-col items-center justify-center gap-3 rounded-lg bg-white p-6 text-center'
+            : 'flex min-h-screen flex-col items-center justify-center gap-4 bg-white p-8 text-center'
+        }
+      >
+        <p
+          className={
+            variant === 'embedded'
+              ? 'text-2xl font-extrabold text-black'
+              : 'text-5xl font-extrabold text-black'
+          }
+        >
+          Display stopped
+        </p>
+        <p
+          className={
+            variant === 'embedded' ? 'text-base text-neutral-600' : 'text-2xl text-neutral-600'
+          }
+        >
+          {errorLabels[error] ?? 'Something went wrong.'}
+        </p>
+        <p
+          className={
+            variant === 'embedded' ? 'text-sm text-neutral-500' : 'text-xl text-neutral-500'
+          }
+        >
+          Generate a new display from the course page.
+        </p>
+      </div>
     )
   }
 
   if (!payload) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-white">
+      <div
+        className={
+          variant === 'embedded'
+            ? 'flex min-h-80 items-center justify-center rounded-lg bg-white'
+            : 'flex min-h-screen items-center justify-center bg-white'
+        }
+      >
         <p
           role="status"
           aria-live="polite"
-          className="flex items-center gap-3 text-3xl text-neutral-600"
+          className={
+            variant === 'embedded'
+              ? 'flex items-center gap-3 text-lg text-neutral-600'
+              : 'flex items-center gap-3 text-3xl text-neutral-600'
+          }
         >
           <Spinner className="size-8" /> Starting…
         </p>
-      </main>
+      </div>
+    )
+  }
+
+  if (variant === 'embedded') {
+    return (
+      <div className="flex min-h-80 flex-col items-center justify-center gap-4 rounded-lg bg-white p-5">
+        <div
+          className="aspect-square w-full max-w-72 [&>svg]:h-full [&>svg]:w-full"
+          dangerouslySetInnerHTML={{ __html: svg }}
+        />
+        <div className="text-center">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-neutral-500">
+            Can&rsquo;t scan? Enter this code
+          </p>
+          <p className="mt-1 font-mono text-5xl font-semibold leading-none tracking-[0.08em] text-black">
+            {payload.code}
+          </p>
+        </div>
+      </div>
     )
   }
 

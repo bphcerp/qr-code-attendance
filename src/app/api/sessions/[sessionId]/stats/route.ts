@@ -1,6 +1,12 @@
-import { count, eq } from 'drizzle-orm'
+import { and, count, eq } from 'drizzle-orm'
 import { db } from '@/db'
-import { attendanceFlags, attendanceRecords, classSessions, enrollments } from '@/db/schema'
+import {
+  attendanceFlags,
+  attendanceRecords,
+  classSessions,
+  enrollments,
+  users,
+} from '@/db/schema'
 import { errorResponse, requireCourseAccess, requireUser, HttpError } from '@/lib/guards'
 import { activeDisplayCount } from '@/lib/displayToken'
 
@@ -32,15 +38,28 @@ export async function GET(_req: Request, { params }: { params: Promise<{ session
 
     await requireCourseAccess(session.courseId)
 
-    const [bySource, [roster], flags, activeDisplays] = await Promise.all([
+    const [bySource, students, flags, activeDisplays] = await Promise.all([
       db
         .select({ source: attendanceRecords.source, n: count() })
         .from(attendanceRecords)
         .where(eq(attendanceRecords.sessionId, sessionId))
         .groupBy(attendanceRecords.source),
       db
-        .select({ n: count() })
+        .select({
+          email: enrollments.studentEmail,
+          name: users.name,
+          markedAt: attendanceRecords.markedAt,
+          source: attendanceRecords.source,
+        })
         .from(enrollments)
+        .innerJoin(users, eq(users.email, enrollments.studentEmail))
+        .leftJoin(
+          attendanceRecords,
+          and(
+            eq(attendanceRecords.sessionId, sessionId),
+            eq(attendanceRecords.studentEmail, enrollments.studentEmail),
+          ),
+        )
         .where(eq(enrollments.courseId, session.courseId)),
       db
         .select({ kind: attendanceFlags.kind, n: count() })
@@ -54,8 +73,16 @@ export async function GET(_req: Request, { params }: { params: Promise<{ session
     return Response.json(
       {
         marked: bySource.reduce((total, row) => total + row.n, 0),
-        roster: roster?.n ?? 0,
+        roster: students.length,
         bySource: Object.fromEntries(bySource.map((row) => [row.source, row.n])),
+        students: students
+          .sort((a, b) => a.name.localeCompare(b.name) || a.email.localeCompare(b.email))
+          .map((student) => ({
+            email: student.email,
+            name: student.name,
+            markedAt: student.markedAt?.toISOString() ?? null,
+            source: student.source,
+          })),
         flags: flags.map((row) => ({ kind: row.kind, count: row.n })),
         activeDisplays,
         declaredDisplayCount: session.declaredDisplayCount,

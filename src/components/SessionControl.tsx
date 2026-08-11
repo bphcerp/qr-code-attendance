@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Copy, ExternalLink, MapPin } from 'lucide-react'
+import { MapPin, RefreshCw, Search } from 'lucide-react'
+import ProjectorDisplay from './ProjectorDisplay'
 import StatusChip from './StatusChip'
 import { Button } from '@/components/ui/button'
 import Spinner from '@/components/ui/spinner'
@@ -25,6 +26,13 @@ type OpenSession = {
   declaredDisplayCount: number
 }
 
+type StudentAttendance = {
+  email: string
+  name: string
+  markedAt: string | null
+  source: 'qr' | 'code' | 'manual' | null
+}
+
 type Stats = {
   marked: number
   roster: number
@@ -32,6 +40,7 @@ type Stats = {
   flags: { kind: string; count: number }[]
   activeDisplays: number
   declaredDisplayCount: number
+  students: StudentAttendance[]
 }
 
 const flagLabels: Record<string, string> = {
@@ -50,7 +59,8 @@ const errorLabels: Record<string, string> = {
   unauthenticated: 'Your sign-in expired. Sign in again and retry.',
   forbidden: 'This account does not have permission to manage this course.',
   not_found: 'This session could not be found. Refresh the page and try again.',
-  clipboard_unavailable: 'Couldn’t copy the link. Open it directly instead.',
+  invalid_rotation_seconds: 'Choose a valid QR rotation time.',
+  session_already_open: 'This course already has a live attendance session.',
 }
 
 type BusyAction = 'start' | 'generate' | 'revoke' | 'end'
@@ -71,29 +81,38 @@ export default function SessionControl({
   const [error, setError] = useState<string | null>(null)
   const [revokeOpen, setRevokeOpen] = useState(false)
   const [endOpen, setEndOpen] = useState(false)
-
   const [qrMode, setQrMode] = useState<'rotating' | 'static'>('rotating')
   const [rotationSeconds, setRotationSeconds] = useState(5)
   const [staticMinutes, setStaticMinutes] = useState(30)
-  const [displayCount, setDisplayCount] = useState(1)
   const [room, setRoom] = useState<{ lat: number; lng: number } | null>(null)
-
-  const [displayLink, setDisplayLink] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
+  const [displayToken, setDisplayToken] = useState<string | null>(null)
   const [stats, setStats] = useState<Stats | null>(null)
-  const copyResetRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [studentQuery, setStudentQuery] = useState('')
 
   const sessionId = openSession?.id
   const busy = busyAction !== null
+  const visibleStudents = useMemo(() => {
+    if (!stats) return []
+    const query = studentQuery.trim().toLowerCase()
+    if (!query) return stats.students
+    return stats.students.filter(
+      (student) =>
+        student.name.toLowerCase().includes(query) || student.email.toLowerCase().includes(query),
+    )
+  }, [stats, studentQuery])
 
   useEffect(() => {
     if (!sessionId) return
     let cancelled = false
 
     const poll = async () => {
-      const res = await fetch(`/api/sessions/${sessionId}/stats`, { cache: 'no-store' })
-      if (cancelled || !res.ok) return
-      setStats(await res.json())
+      try {
+        const res = await fetch(`/api/sessions/${sessionId}/stats`, { cache: 'no-store' })
+        if (cancelled || !res.ok) return
+        setStats(await res.json())
+      } catch {
+        // A later poll can recover from a brief classroom Wi-Fi interruption.
+      }
     }
 
     poll()
@@ -104,12 +123,13 @@ export default function SessionControl({
     }
   }, [sessionId])
 
-  useEffect(
-    () => () => {
-      if (copyResetRef.current) clearTimeout(copyResetRef.current)
-    },
-    [],
-  )
+  useEffect(() => {
+    if (!sessionId) return
+    const timer = window.setTimeout(() => {
+      setDisplayToken(sessionStorage.getItem(displayStorageKey(sessionId)))
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [sessionId])
 
   async function post(url: string, method: string, action: BusyAction, body?: unknown) {
     setBusyAction(action)
@@ -137,46 +157,39 @@ export default function SessionControl({
   async function start() {
     const created = await post(`/api/courses/${courseId}/sessions`, 'POST', 'start', {
       rotationSeconds: qrMode === 'static' ? staticMinutes * 60 : rotationSeconds,
-      declaredDisplayCount: displayCount,
+      declaredDisplayCount: 1,
       roomLat: room?.lat ?? null,
       roomLng: room?.lng ?? null,
     })
-    if (created) router.refresh()
-  }
-
-  async function generateLink() {
-    const issued = await post(`/api/sessions/${sessionId}/display-token`, 'POST', 'generate')
-    if (issued) {
-      setDisplayLink(`${window.location.origin}/display/${sessionId}?dt=${issued.token}`)
-      setCopied(false)
+    if (created) {
+      sessionStorage.setItem(displayStorageKey(created.id), created.displayToken)
+      router.refresh()
     }
   }
 
-  async function revokeLinks() {
+  async function generateDisplay() {
+    const issued = await post(`/api/sessions/${sessionId}/display-token`, 'POST', 'generate')
+    if (issued && sessionId) {
+      setDisplayToken(issued.token)
+      sessionStorage.setItem(displayStorageKey(sessionId), issued.token)
+    }
+  }
+
+  async function revokeDisplays() {
     if (await post(`/api/sessions/${sessionId}/display-token`, 'DELETE', 'revoke')) {
-      setDisplayLink(null)
+      setDisplayToken(null)
+      if (sessionId) sessionStorage.removeItem(displayStorageKey(sessionId))
       setRevokeOpen(false)
     }
   }
 
   async function endSession() {
     if (await post(`/api/sessions/${sessionId}/end`, 'POST', 'end')) {
-      setDisplayLink(null)
+      setDisplayToken(null)
+      if (sessionId) sessionStorage.removeItem(displayStorageKey(sessionId))
       setStats(null)
       setEndOpen(false)
       router.refresh()
-    }
-  }
-
-  async function copyLink() {
-    if (!displayLink) return
-    try {
-      await navigator.clipboard.writeText(displayLink)
-      setCopied(true)
-      if (copyResetRef.current) clearTimeout(copyResetRef.current)
-      copyResetRef.current = setTimeout(() => setCopied(false), 2000)
-    } catch {
-      setError('clipboard_unavailable')
     }
   }
 
@@ -190,12 +203,30 @@ export default function SessionControl({
 
   return (
     <>
-      <div className="my-8 flex items-center gap-4">
+      <div className="my-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="page-title">{courseCode}</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="page-title">{courseCode}</h1>
+            {openSession && <StatusChip tone="live">Live</StatusChip>}
+          </div>
           <p className="mt-1 text-muted-foreground">{courseTitle}</p>
+          {openSession && (
+            <p className="meta mt-2">Started {formatTimestamp(openSession.startedAt)}</p>
+          )}
         </div>
-        {openSession && <StatusChip tone="live">Live</StatusChip>}
+
+        {openSession && (
+          <EndSessionDialog
+            courseCode={courseCode}
+            busy={busy}
+            busyAction={busyAction}
+            marked={stats?.marked}
+            roster={stats?.roster}
+            open={endOpen}
+            onOpenChange={setEndOpen}
+            onEnd={endSession}
+          />
+        )}
       </div>
 
       {error && (
@@ -208,14 +239,19 @@ export default function SessionControl({
       )}
 
       {!openSession ? (
-        <div className="animate-in fade-in-0 rounded-lg border border-border bg-card p-5 duration-150">
-          <p className="meta">Start a session</p>
+        <div className="animate-in fade-in-0 rounded-lg border border-border bg-card p-5 duration-150 sm:p-6">
+          <div>
+            <p className="text-lg font-bold text-card-foreground">Start attendance</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              The live QR and student timestamps will appear here as soon as the session starts.
+            </p>
+          </div>
 
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="mt-6 grid gap-5 md:grid-cols-2">
             <label className="block">
-              <span className="text-sm text-muted-foreground">QR mode</span>
+              <span className="text-sm font-medium text-card-foreground">QR mode</span>
               <div
-                className="mt-1.5 inline-flex rounded-md border border-input p-1"
+                className="mt-2 inline-flex rounded-md border border-input p-1"
                 role="radiogroup"
                 aria-label="QR mode"
               >
@@ -248,15 +284,18 @@ export default function SessionControl({
               </div>
 
               {qrMode === 'rotating' ? (
-                <input
-                  type="number"
-                  min={3}
-                  max={30}
-                  value={rotationSeconds}
-                  onChange={(e) => setRotationSeconds(Number(e.target.value))}
-                  aria-label="QR rotates every (seconds)"
-                  className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2.5 font-mono text-card-foreground outline-none focus:border-ring"
-                />
+                <>
+                  <input
+                    type="number"
+                    min={3}
+                    max={30}
+                    value={rotationSeconds}
+                    onChange={(event) => setRotationSeconds(Number(event.target.value))}
+                    aria-label="QR rotates every (seconds)"
+                    className="mt-3 w-full rounded-md border border-input bg-background px-3 py-2.5 font-mono text-card-foreground outline-none focus:border-ring"
+                  />
+                  <span className="meta mt-1.5 block">Seconds between secure QR rotations</span>
+                </>
               ) : (
                 <>
                   <input
@@ -264,46 +303,38 @@ export default function SessionControl({
                     min={1}
                     max={STATIC_MINUTES_MAX}
                     value={staticMinutes}
-                    onChange={(e) => setStaticMinutes(Number(e.target.value))}
+                    onChange={(event) => setStaticMinutes(Number(event.target.value))}
                     aria-label="Stays the same for (minutes)"
-                    className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2.5 font-mono text-card-foreground outline-none focus:border-ring"
+                    className="mt-3 w-full rounded-md border border-input bg-background px-3 py-2.5 font-mono text-card-foreground outline-none focus:border-ring"
                   />
                   <span className="meta mt-1.5 block text-destructive">
-                    Screenshots of this QR will work for the full {staticMinutes} minutes — pick the
-                    shortest window that covers your session.
+                    Screenshots work for all {staticMinutes} minutes. Use the shortest practical window.
                   </span>
                 </>
               )}
             </label>
 
-            <label className="block">
-              <span className="text-sm text-muted-foreground">Screens in this room</span>
-              <input
-                type="number"
-                min={1}
-                max={12}
-                value={displayCount}
-                onChange={(e) => setDisplayCount(Number(e.target.value))}
-                className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2.5 font-mono text-card-foreground outline-none focus:border-ring"
-              />
-              <span className="meta mt-1.5 block">
-                Flags the dashboard if more displays than this are live at once — catches a link left
-                open somewhere unexpected.
-              </span>
-            </label>
+            <div>
+              <span className="text-sm font-medium text-card-foreground">Room location</span>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Optional. Setting it lets the dashboard flag scans far from the classroom.
+              </p>
+              <Button variant="outline" className="mt-3" onClick={useMyLocation}>
+                <MapPin />
+                {room ? 'Update location' : 'Use this location'}
+              </Button>
+              <p className="meta mt-2">
+                {room ? `${room.lat.toFixed(5)}, ${room.lng.toFixed(5)}` : 'No location set'}
+              </p>
+            </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <Button variant="outline" onClick={useMyLocation}>
-              <MapPin />
-              {room ? 'Update room location' : 'Set room location'}
-            </Button>
-            <span className="meta">
-              {room ? `${room.lat.toFixed(5)}, ${room.lng.toFixed(5)}` : 'Optional — no geo flags without it'}
-            </span>
-          </div>
-
-          <Button size="lg" className="mt-6 h-12 w-full text-base sm:w-auto sm:px-8" disabled={busy} onClick={start}>
+          <Button
+            size="lg"
+            className="mt-7 h-12 w-full text-base sm:w-auto sm:px-8"
+            disabled={busy}
+            onClick={start}
+          >
             {busyAction === 'start' && <Spinner />}
             {busyAction === 'start' ? 'Starting session…' : 'Start session'}
           </Button>
@@ -312,154 +343,225 @@ export default function SessionControl({
         <div className="animate-in fade-in-0 duration-150">
           <div className="grid gap-3 sm:grid-cols-3" aria-busy={stats === null}>
             <Tile
-              label="Marked present"
+              label="Present"
               value={stats ? `${stats.marked}` : null}
-              note={stats ? `of ${stats.roster} enrolled` : undefined}
+              note={stats ? `of ${stats.roster} students` : undefined}
             />
             <Tile
-              label="Active displays"
-              value={stats ? `${stats.activeDisplays}` : null}
-              note={
-                stats
-                  ? stats.activeDisplays > stats.declaredDisplayCount
-                    ? `${stats.activeDisplays - stats.declaredDisplayCount} more than declared`
-                    : `${stats.declaredDisplayCount} declared`
-                  : undefined
-              }
-              // More screens polling than the room has is the signal that a
-              // display link left the podium. It is meant to be visible, not
-              // buried in an audit table nobody opens mid-lecture.
-              alert={Boolean(stats && stats.activeDisplays > stats.declaredDisplayCount)}
+              label="Waiting"
+              value={stats ? `${Math.max(0, stats.roster - stats.marked)}` : null}
+              note="Not marked yet"
             />
             <Tile
-              label="Typed the code"
-              value={stats ? `${stats.bySource.code ?? 0}` : null}
-              note={stats ? `${stats.bySource.qr ?? 0} scanned the QR` : undefined}
+              label="Attendance"
+              value={stats ? `${stats.roster ? Math.round((stats.marked / stats.roster) * 100) : 0}%` : null}
+              note={stats ? `${stats.bySource.qr ?? 0} QR · ${stats.bySource.code ?? 0} code` : undefined}
             />
           </div>
 
-          <div className="mt-3 grid gap-3 lg:grid-cols-2">
-            <div className="rounded-lg border border-border bg-card p-5">
-              <p className="meta">Projector link</p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Open this on every screen in the room. It locks to the first machine that opens it,
-                so generate it at the podium.
-              </p>
+          <div className="mt-4 grid items-start gap-4 xl:grid-cols-5">
+            <div className="space-y-4 xl:sticky xl:top-24 xl:col-span-2">
+              <section className="rounded-lg border border-border bg-card p-4 shadow-[var(--shadow)]">
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-bold text-card-foreground">Attendance QR</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Shown on this page—no new tab or link needed.
+                    </p>
+                  </div>
+                  {displayToken && <StatusChip tone="live">On</StatusChip>}
+                </div>
 
-              {displayLink ? (
-                <>
-                  <p className="mt-4 text-sm text-muted-foreground">
-                    Link generated. Copy it or open it directly — keep it off any screen that&rsquo;s
-                    shared or recorded, since whoever holds it can open the live QR from anywhere.
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-3">
-                    <Button
-                      variant="outline"
-                      onClick={copyLink}
-                    >
-                      <Copy />
-                      {copied ? 'Copied' : 'Copy link'}
-                    </Button>
-                    <Button asChild>
-                      <a href={displayLink} target="_blank" rel="noreferrer">
-                        <ExternalLink />
-                        Open display
-                      </a>
+                {displayToken ? (
+                  <ProjectorDisplay
+                    sessionId={openSession.id}
+                    displayToken={displayToken}
+                    variant="embedded"
+                  />
+                ) : (
+                  <div className="flex min-h-80 flex-col items-center justify-center rounded-lg border border-dashed border-border bg-muted/40 p-6 text-center">
+                    <p className="font-medium text-card-foreground">Display is off</p>
+                    <p className="mt-1 max-w-xs text-sm text-muted-foreground">
+                      Show the secure QR right here when the classroom is ready.
+                    </p>
+                    <Button className="mt-4" disabled={busy} onClick={generateDisplay}>
+                      {busyAction === 'generate' && <Spinner />}
+                      {busyAction === 'generate' ? 'Starting display…' : 'Show QR here'}
                     </Button>
                   </div>
-                </>
-              ) : (
-                <Button className="mt-4" disabled={busy} onClick={generateLink}>
-                  {busyAction === 'generate' && <Spinner />}
-                  {busyAction === 'generate' ? 'Generating link…' : 'Generate projector link'}
-                </Button>
-              )}
+                )}
 
-              <Dialog open={revokeOpen} onOpenChange={(open) => !busy && setRevokeOpen(open)}>
-                <DialogTrigger asChild>
-                  <Button variant="destructive" className="mt-4" disabled={busy}>
-                    Revoke every link
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Revoke every projector link?</DialogTitle>
-                    <DialogDescription>
-                      Every display showing {courseCode} will stop immediately. You can generate a
-                      new link afterwards.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <DialogFooter>
-                    <DialogClose asChild>
-                      <Button variant="outline" disabled={busy}>
-                        Cancel
-                      </Button>
-                    </DialogClose>
-                    <Button variant="destructive" onClick={revokeLinks} disabled={busy}>
-                      {busyAction === 'revoke' && <Spinner />}
-                      {busyAction === 'revoke' ? 'Revoking…' : 'Revoke every link'}
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+                <div className="mt-4 flex items-center justify-between gap-3">
+                  <p className="meta">
+                    {stats ? `${stats.activeDisplays} active display${stats.activeDisplays === 1 ? '' : 's'}` : 'Checking display'}
+                  </p>
+                  {displayToken && (
+                    <Dialog open={revokeOpen} onOpenChange={(open) => !busy && setRevokeOpen(open)}>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" size="sm" disabled={busy}>
+                          <RefreshCw /> Reset display
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Reset the attendance display?</DialogTitle>
+                          <DialogDescription>
+                            The current QR will stop immediately. Select “Show QR here” afterwards to
+                            start a fresh display.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                          <DialogClose asChild>
+                            <Button variant="outline" disabled={busy}>Cancel</Button>
+                          </DialogClose>
+                          <Button variant="destructive" onClick={revokeDisplays} disabled={busy}>
+                            {busyAction === 'revoke' && <Spinner />}
+                            {busyAction === 'revoke' ? 'Resetting…' : 'Reset display'}
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  )}
+                </div>
+              </section>
+
+              <section className="rounded-lg border border-border bg-card p-5">
+                <p className="font-bold text-card-foreground">Review flags</p>
+                {stats && stats.flags.some((flag) => flagLabels[flag.kind]) ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {stats.flags
+                      .filter((flag) => flagLabels[flag.kind])
+                      .map((flag) => (
+                        <StatusChip key={flag.kind} tone="flagged">
+                          {flagLabels[flag.kind]} · {flag.count}
+                        </StatusChip>
+                      ))}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Nothing flagged. A flag is a prompt to review, never a verdict.
+                  </p>
+                )}
+              </section>
             </div>
 
-            <div className="rounded-lg border border-border bg-card p-5">
-              <p className="meta">Flags</p>
-              {stats && stats.flags.some((f) => flagLabels[f.kind]) ? (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {stats.flags
-                    .filter((f) => flagLabels[f.kind])
-                    .map((f) => (
-                      <StatusChip key={f.kind} tone="flagged">
-                        {flagLabels[f.kind]} · {f.count}
-                      </StatusChip>
-                    ))}
+            <section className="overflow-hidden rounded-lg border border-border bg-card xl:col-span-3">
+              <div className="border-b border-border p-4 sm:flex sm:items-center sm:justify-between sm:gap-4">
+                <div>
+                  <h2 className="font-bold text-card-foreground">Student timestamps</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Updates automatically every five seconds.
+                  </p>
+                </div>
+                <label className="relative mt-3 block sm:mt-0 sm:w-64">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <span className="sr-only">Search students</span>
+                  <input
+                    type="search"
+                    value={studentQuery}
+                    onChange={(event) => setStudentQuery(event.target.value)}
+                    placeholder="Search students"
+                    className="h-10 w-full rounded-md border border-input bg-background pl-9 pr-3 text-sm outline-none focus:border-ring"
+                  />
+                </label>
+              </div>
+
+              {!stats ? (
+                <div className="space-y-3 p-4" aria-label="Student list loading">
+                  {[0, 1, 2, 3].map((row) => (
+                    <div key={row} className="h-14 animate-pulse rounded-md bg-muted" />
+                  ))}
+                </div>
+              ) : visibleStudents.length ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[620px] text-left text-sm">
+                    <thead className="bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground">
+                      <tr>
+                        <th className="px-4 py-3 font-semibold">Student</th>
+                        <th className="px-4 py-3 font-semibold">Status</th>
+                        <th className="px-4 py-3 font-semibold">Marked at</th>
+                        <th className="px-4 py-3 font-semibold">Method</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {visibleStudents.map((student) => (
+                        <tr key={student.email} className="transition-colors hover:bg-muted/30">
+                          <td className="px-4 py-3">
+                            <p className="font-medium text-card-foreground">{student.name}</p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">{student.email}</p>
+                          </td>
+                          <td className="px-4 py-3">
+                            <StatusChip tone={student.markedAt ? 'present' : 'pending'}>
+                              {student.markedAt ? 'Present' : 'Waiting'}
+                            </StatusChip>
+                          </td>
+                          <td className="px-4 py-3 font-mono text-xs text-card-foreground">
+                            {student.markedAt ? formatTimestamp(student.markedAt) : '—'}
+                          </td>
+                          <td className="px-4 py-3 capitalize text-muted-foreground">
+                            {student.source ?? '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               ) : (
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Nothing flagged. A flag is a prompt to look, never a verdict on its own.
+                <p className="p-8 text-center text-sm text-muted-foreground">
+                  No students match “{studentQuery}”.
                 </p>
               )}
-            </div>
+            </section>
           </div>
-
-          <Dialog open={endOpen} onOpenChange={(open) => !busy && setEndOpen(open)}>
-            <DialogTrigger asChild>
-              <Button
-                variant="destructive"
-                size="lg"
-                className="mt-6 h-12 w-full text-base sm:w-auto sm:px-8"
-                disabled={busy}
-              >
-                End session
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>End attendance for {courseCode}?</DialogTitle>
-                <DialogDescription>
-                  {stats ? `${stats.marked} of ${stats.roster} students have marked. ` : ''}
-                  Students still waiting will no longer be able to scan, and this session cannot
-                  be reopened.
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
-                <DialogClose asChild>
-                  <Button variant="outline" disabled={busy}>
-                    Keep session open
-                  </Button>
-                </DialogClose>
-                <Button variant="destructive" onClick={endSession} disabled={busy}>
-                  {busyAction === 'end' && <Spinner />}
-                  {busyAction === 'end' ? 'Ending session…' : 'End session'}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
         </div>
       )}
     </>
+  )
+}
+
+function EndSessionDialog({
+  courseCode,
+  busy,
+  busyAction,
+  marked,
+  roster,
+  open,
+  onOpenChange,
+  onEnd,
+}: {
+  courseCode: string
+  busy: boolean
+  busyAction: BusyAction | null
+  marked?: number
+  roster?: number
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onEnd: () => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={(nextOpen) => !busy && onOpenChange(nextOpen)}>
+      <DialogTrigger asChild>
+        <Button variant="destructive" disabled={busy}>End session</Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>End attendance for {courseCode}?</DialogTitle>
+          <DialogDescription>
+            {marked != null && roster != null ? `${marked} of ${roster} students have marked. ` : ''}
+            Students still waiting will no longer be able to scan, and this session cannot be reopened.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline" disabled={busy}>Keep session open</Button>
+          </DialogClose>
+          <Button variant="destructive" onClick={onEnd} disabled={busy}>
+            {busyAction === 'end' && <Spinner />}
+            {busyAction === 'end' ? 'Ending session…' : 'End session'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -467,12 +569,10 @@ function Tile({
   label,
   value,
   note,
-  alert,
 }: {
   label: string
   value: string | null
   note?: string
-  alert?: boolean
 }) {
   return (
     <div
@@ -487,15 +587,21 @@ function Tile({
         </div>
       ) : (
         <>
-          <p
-            className="stat mt-2"
-            style={alert ? { color: 'var(--status-flagged)' } : undefined}
-          >
-            {value}
-          </p>
+          <p className="stat mt-2">{value}</p>
           <p className="meta mt-1">{note}</p>
         </>
       )}
     </div>
   )
+}
+
+function displayStorageKey(sessionId: string) {
+  return `attendance-display:${sessionId}`
+}
+
+function formatTimestamp(value: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'medium',
+  }).format(new Date(value))
 }

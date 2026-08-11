@@ -3,11 +3,12 @@ import { db } from '@/db'
 import { classSessions } from '@/db/schema'
 import { errorResponse, requireCourseAccess, HttpError } from '@/lib/guards'
 import { newSessionSecret, isValidRotationSeconds } from '@/lib/token'
+import { issueDisplayToken } from '@/lib/displayToken'
 
 export async function POST(req: Request, { params }: { params: Promise<{ courseId: string }> }) {
   try {
     const { courseId } = await params
-    await requireCourseAccess(courseId)
+    const { email } = await requireCourseAccess(courseId)
 
     const body = await req.json().catch(() => ({}))
     const rotationSeconds = Number(body.rotationSeconds) || 5
@@ -35,7 +36,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ courseI
       })
       .returning({ id: classSessions.id, startedAt: classSessions.startedAt })
 
-    return Response.json(session)
+    const display = await issueDisplayToken(session.id, email)
+
+    return Response.json({ ...session, displayToken: display.token })
   } catch (err) {
     return errorResponse(err)
   }
