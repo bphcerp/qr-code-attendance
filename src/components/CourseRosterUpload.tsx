@@ -54,7 +54,7 @@ export default function CourseRosterUpload({
           <div>
             <h2 className="text-lg">Student roster</h2>
             <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-              Upload an Excel or CSV file with <code>ID Number</code> and <code>Name</code> columns.
+              Upload an Excel (<code>.xls</code> or <code>.xlsx</code>) or CSV file with <code>ID Number</code> and <code>Name</code> columns.
               IDs should match the student email ID before <code>@</code> so first-time students are enrolled automatically.
             </p>
           </div>
@@ -66,7 +66,7 @@ export default function CourseRosterUpload({
         <input
           ref={inputRef}
           type="file"
-          accept=".xlsx,.csv,.tsv"
+          accept=".xls,.xlsx,.csv,.tsv"
           className="sr-only"
           onChange={(event) => {
             const file = event.target.files?.[0]
