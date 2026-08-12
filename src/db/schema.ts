@@ -97,6 +97,19 @@ export const courseRoster = pgTable(
   ],
 )
 
+export const studentDirectory = pgTable(
+  'student_directory',
+  {
+    email: varchar('email').primaryKey(),
+    fullName: varchar('full_name').notNull(),
+    batch: integer('batch'),
+    source: varchar('source').notNull().default('mess-2026-03'),
+  },
+  (table) => [
+    index('student_directory_name_idx').on(table.fullName),
+  ],
+)
+
 export const classSessions = pgTable(
   'class_sessions',
   {

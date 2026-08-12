@@ -96,7 +96,6 @@ export default async function SessionPage({
       />
       <CourseRosterUpload
         courseId={course.id}
-        initialCount={rosterCount?.count ?? 0}
         initialRoster={rosterRows}
       />
       <AttendanceHistory rows={history} />
