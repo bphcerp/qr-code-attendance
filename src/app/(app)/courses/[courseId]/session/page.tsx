@@ -23,7 +23,7 @@ export default async function SessionPage({
   // course and open-session are independent of each other and of `me` -- the
   // parent layout already fetched `me` for this request, so getCurrentUser()
   // is a cache() hit rather than a fourth round trip.
-  const [me, [course], [open], [rosterCount], [enrollmentCount], sessions] = await Promise.all([
+  const [me, [course], [open], [rosterCount], [enrollmentCount], rosterRows, sessions] = await Promise.all([
     getCurrentUser(email),
     db
       .select({
@@ -51,6 +51,11 @@ export default async function SessionPage({
       .select({ count: count() })
       .from(enrollments)
       .where(eq(enrollments.courseId, courseId)),
+    db
+      .select({ studentId: courseRoster.studentId, studentName: courseRoster.studentName })
+      .from(courseRoster)
+      .where(eq(courseRoster.courseId, courseId))
+      .orderBy(courseRoster.studentName, courseRoster.studentId),
     db
       .select({ id: classSessions.id, startedAt: classSessions.startedAt, endedAt: classSessions.endedAt })
       .from(classSessions)
@@ -89,7 +94,11 @@ export default async function SessionPage({
         courseTitle={course.title}
         openSession={open ? { ...open, startedAt: open.startedAt.toISOString() } : null}
       />
-      <CourseRosterUpload courseId={course.id} initialCount={rosterCount?.count ?? 0} />
+      <CourseRosterUpload
+        courseId={course.id}
+        initialCount={rosterCount?.count ?? 0}
+        initialRoster={rosterRows}
+      />
       <AttendanceHistory rows={history} />
     </div>
   )

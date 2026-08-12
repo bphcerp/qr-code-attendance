@@ -2,19 +2,22 @@
 
 import { useRef, useState } from 'react'
 import { FileSpreadsheet, Upload } from 'lucide-react'
-import { parseRosterFile } from '@/lib/parseRosterFile'
+import { parseRosterFile, type RosterRow } from '@/lib/parseRosterFile'
 import { Button } from '@/components/ui/button'
 import Spinner from '@/components/ui/spinner'
 
 export default function CourseRosterUpload({
   courseId,
   initialCount,
+  initialRoster,
 }: {
   courseId: string
   initialCount: number
+  initialRoster: RosterRow[]
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [count, setCount] = useState(initialCount)
+  const [roster, setRoster] = useState<RosterRow[]>(initialRoster)
   const [fileName, setFileName] = useState('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
@@ -35,6 +38,7 @@ export default function CourseRosterUpload({
       const body = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(errorLabel(body.error))
       setCount(body.count)
+      setRoster(rows)
       setMessage(`${body.count} students imported. The new roster replaces the previous one.`)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not import the roster.')
@@ -86,6 +90,34 @@ export default function CourseRosterUpload({
         <p role="alert" className="mt-3 text-sm text-destructive">
           {error}
         </p>
+      )}
+
+      {roster.length > 0 && (
+        <div className="mt-6 overflow-hidden rounded-md border border-border">
+          <div className="border-b border-border bg-muted/30 px-4 py-3">
+            <h3 className="text-sm font-semibold">Students in roster</h3>
+          </div>
+          <div className="max-h-96 overflow-y-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="sticky top-0 border-b border-border bg-card text-xs uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th scope="col" className="w-16 px-4 py-2 font-medium">#</th>
+                  <th scope="col" className="px-4 py-2 font-medium">ID Number</th>
+                  <th scope="col" className="px-4 py-2 font-medium">Name</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {roster.map((student, index) => (
+                  <tr key={student.studentId}>
+                    <td className="px-4 py-2 text-muted-foreground">{index + 1}</td>
+                    <td className="px-4 py-2 font-mono text-xs">{student.studentId}</td>
+                    <td className="px-4 py-2">{student.studentName}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
     </section>
   )
