@@ -1,8 +1,8 @@
 import NextAuth from 'next-auth'
 import Google from 'next-auth/providers/google'
-import { eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { db } from '@/db'
-import { users } from '@/db/schema'
+import { auditLog, facultyInvites, users } from '@/db/schema'
 
 const allowedDomains = (process.env.ALLOWED_EMAIL_DOMAINS ?? '')
   .split(',')
@@ -25,6 +25,44 @@ export function isAllowedEmail(email: string | null | undefined) {
   const domain = normalized.split('@')[1]
   if (!domain) return false
   return allowedDomains.includes(domain)
+}
+
+/**
+ * Turns an admin's pre-authorisation into a real role, once and only once, at
+ * the moment the invited address first authenticates. Runs on every sign-in,
+ * which is cheap (a primary-key lookup that misses for everyone but the
+ * handful of invited addresses) and is nowhere near the per-request path.
+ *
+ * The promotion is scoped to role='student' so a re-issued invite can never
+ * demote an admin, and the invite is marked claimed regardless -- an invite for
+ * someone who is already faculty has still been answered.
+ */
+export async function claimFacultyInvite(email: string) {
+  const [invite] = await db
+    .select({ invitedByEmail: facultyInvites.invitedByEmail })
+    .from(facultyInvites)
+    .where(and(eq(facultyInvites.email, email), isNull(facultyInvites.claimedAt)))
+  if (!invite) return
+
+  const promoted = await db
+    .update(users)
+    .set({ role: 'faculty' })
+    .where(and(eq(users.email, email), eq(users.role, 'student')))
+    .returning({ email: users.email })
+
+  await db
+    .update(facultyInvites)
+    .set({ claimedAt: new Date() })
+    .where(eq(facultyInvites.email, email))
+
+  if (promoted.length) {
+    await db.insert(auditLog).values({
+      actorEmail: invite.invitedByEmail,
+      action: 'role.change',
+      subject: email,
+      detail: { from: 'student', to: 'faculty', via: 'faculty_invite' },
+    })
+  }
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -59,6 +97,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         .insert(users)
         .values({ email: email!, name: user.name ?? email!, campus: email!.split('@')[1] })
         .onConflictDoNothing()
+
+      await claimFacultyInvite(email!)
 
       return true
     },

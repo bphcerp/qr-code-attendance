@@ -61,6 +61,24 @@ export const courses = pgTable(
   (table) => [index('courses_faculty_email_idx').on(table.facultyEmail)],
 )
 
+// An address an admin has designated as faculty *before* it has ever signed in.
+// It is deliberately not a `users` row with role='faculty': writing one for an
+// account that has never authenticated leaves a privileged role sitting there
+// for whoever registers that address first, which is the same reason
+// scripts/seedAdmin.ts skips unknown addresses rather than creating them. The
+// invite is claimed in the signIn callback, so the role only ever lands on an
+// account Google has actually authenticated.
+export const facultyInvites = pgTable('faculty_invites', {
+  email: varchar('email').primaryKey(),
+  invitedByEmail: varchar('invited_by_email')
+    .notNull()
+    .references(() => users.email),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  // null until that address signs in and the role is granted. Kept rather than
+  // deleted so the dashboard can show that an invite was taken up, and by when.
+  claimedAt: timestamp('claimed_at', { withTimezone: true }),
+})
+
 export const enrollments = pgTable(
   'enrollments',
   {

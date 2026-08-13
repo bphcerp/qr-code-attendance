@@ -29,6 +29,13 @@
       "when": 1786554973664,
       "tag": "0003_lame_slyde",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786618632451,
+      "tag": "0004_faculty_invites",
+      "breakpoints": true
     }
   ]
 }
