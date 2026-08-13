@@ -53,7 +53,7 @@ export default function CourseRosterUpload({
       } finally {
         if (!controller.signal.aborted) setSearching(false)
       }
-    }, 200)
+    }, 120)
 
     return () => {
       window.clearTimeout(timer)
