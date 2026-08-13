@@ -35,11 +35,34 @@ async function main() {
     return
   }
 
-  // The session pooler, not the transaction pooler: PgBouncer in transaction
-  // mode cannot hold the advisory lock the migrator takes, nor the state that
-  // multi-statement DDL needs.
-  const url = process.env.DIRECT_URL ?? process.env.DATABASE_URL
-  if (!url) throw new Error('DIRECT_URL (or DATABASE_URL) must be set to migrate')
+  // DIRECT_URL only, and deliberately no fall back to DATABASE_URL. Two
+  // separate reasons, both of which bite:
+  //
+  // - DATABASE_URL is the transaction pooler. PgBouncer in transaction mode
+  //   cannot hold the advisory lock the migrator takes, nor the state that
+  //   multi-statement DDL needs.
+  // - DATABASE_URL is also the *runtime* role. Production connects as
+  //   attendance_app, which has table privileges and no DDL rights at all --
+  //   it cannot even `CREATE SCHEMA IF NOT EXISTS "drizzle"`, which the
+  //   migrator issues before anything else (Postgres checks the privilege
+  //   before the IF NOT EXISTS shortcut, so an existing schema still fails).
+  //   Granting it DDL to make this work would defeat the point of running the
+  //   app under a restricted role.
+  //
+  // So migrating needs its own privileged connection. Without one, say so and
+  // let the deploy through rather than blocking every deploy on it.
+  const url = process.env.DIRECT_URL
+  if (!url) {
+    console.warn(
+      'WARNING: DIRECT_URL is not set, so no migrations were applied.\n' +
+        '  Migrations must then be run by hand (npm run db:migrate:prod) and it is\n' +
+        '  possible to deploy code against a schema that was never migrated -- the\n' +
+        '  exact failure this script exists to prevent.\n' +
+        '  Set DIRECT_URL to the session-pooler URL of a role that can run DDL\n' +
+        '  (port 5432, the postgres role -- not the attendance_app runtime role).',
+    )
+    return
+  }
 
   // A deploy that migrates localhost has silently done nothing to the database
   // anyone is actually using, and would report success while doing it.
@@ -51,6 +74,26 @@ async function main() {
 
   const sql = postgres(url, { max: 1, prepare: false })
   try {
+    // Checked up front rather than discovered halfway through. The migrator's
+    // very first statement is CREATE SCHEMA IF NOT EXISTS "drizzle", so a
+    // connection without DDL rights dies there -- and a deploy that fails on
+    // *configuration* would block every deploy, including the ones that fix it.
+    // A genuine migration failure below still fails the build, which is the
+    // part that matters.
+    const [{ can_create: canCreate, who }] = await sql`
+      select
+        has_database_privilege(current_user, current_database(), 'CREATE') as can_create,
+        current_user as who
+    `
+    if (!canCreate) {
+      console.warn(
+        `WARNING: connected as "${who}", which cannot run DDL — no migrations were applied.\n` +
+          '  This is the runtime role. Point DIRECT_URL at the postgres role on the\n' +
+          '  session pooler (5432) instead, or run npm run db:migrate:prod by hand.',
+      )
+      return
+    }
+
     await migrate(drizzle(sql), { migrationsFolder: 'drizzle' })
     console.log('migrations up to date')
   } finally {
