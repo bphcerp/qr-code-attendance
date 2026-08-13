@@ -5,10 +5,12 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "vercel-build": "tsx scripts/deployMigrate.ts && next build",
     "start": "next start",
     "lint": "eslint",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:migrate:prod": "tsx --env-file=.env.supabase scripts/deployMigrate.ts --force",
     "db:studio": "drizzle-kit studio",
     "seed:admin": "tsx --env-file=.env.local scripts/seedAdmin.ts"
   },
