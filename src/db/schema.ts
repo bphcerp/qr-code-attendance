@@ -61,6 +61,35 @@ export const courses = pgTable(
   (table) => [index('courses_faculty_email_idx').on(table.facultyEmail)],
 )
 
+// Everyone who teaches a course, so a course is not the property of whoever
+// happened to create it. Courses shared between two or three instructors are
+// the normal case here, not the exception -- lectures and tutorials for the
+// same course are frequently not the same person.
+//
+// `courses.facultyEmail` stays as the owner: it is who created the course, who
+// is shown to students, and the only one who can change this list. Every owner
+// is also a row here, backfilled in 0006, so permission checks read one table
+// instead of having to remember to check both.
+export const courseFaculty = pgTable(
+  'course_faculty',
+  {
+    courseId: uuid('course_id')
+      .notNull()
+      .references(() => courses.id, { onDelete: 'cascade' }),
+    facultyEmail: varchar('faculty_email')
+      .notNull()
+      .references(() => users.email, { onDelete: 'cascade' }),
+    addedByEmail: varchar('added_by_email').references(() => users.email),
+    addedAt: timestamp('added_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.courseId, table.facultyEmail] }),
+    // "which courses do I teach" is the query behind every faculty screen, and
+    // facultyEmail is the second column of the PK above, so it cannot lead.
+    index('course_faculty_email_idx').on(table.facultyEmail),
+  ],
+)
+
 // An address an admin has designated as faculty *before* it has ever signed in.
 // It is deliberately not a `users` row with role='faculty': writing one for an
 // account that has never authenticated leaves a privileged role sitting there

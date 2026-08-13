@@ -43,6 +43,13 @@
       "when": 1786632181000,
       "tag": "0005_faculty_invites_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786632498000,
+      "tag": "0006_course_faculty",
+      "breakpoints": true
     }
   ]
 }

@@ -4,12 +4,11 @@ import {
   attendanceFlags,
   attendanceRecords,
   classSessions,
-  courses,
   courseRoster,
   enrollments,
   users,
 } from '@/db/schema'
-import { errorResponse, requireRole, HttpError } from '@/lib/guards'
+import { errorResponse, requireCourseAccess, requireRole, HttpError } from '@/lib/guards'
 import { activeDisplayCount } from '@/lib/displayToken'
 import { studentIdFromEmail } from '@/lib/studentId'
 
@@ -26,23 +25,19 @@ export async function GET(_req: Request, { params }: { params: Promise<{ session
 
     // Authenticate before the lookup, so a signed-out caller can't tell a real
     // session id from a made-up one by the difference between 404 and 403.
-    const { email, role } = await requireRole('faculty', 'admin')
+    await requireRole('faculty', 'admin')
 
     const [session] = await db
       .select({
         courseId: classSessions.courseId,
-        facultyEmail: courses.facultyEmail,
         startedAt: classSessions.startedAt,
         endedAt: classSessions.endedAt,
         declaredDisplayCount: classSessions.declaredDisplayCount,
       })
       .from(classSessions)
-      .innerJoin(courses, eq(courses.id, classSessions.courseId))
       .where(eq(classSessions.id, sessionId))
     if (!session) throw new HttpError(404, 'not_found')
-    if (role !== 'admin' && session.facultyEmail.toLowerCase() !== email) {
-      throw new HttpError(403, 'forbidden')
-    }
+    await requireCourseAccess(session.courseId)
 
     const [roster, enrolledStudents, attendance, flags, activeDisplays] = await Promise.all([
       db

@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { and, count, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 import { db } from '@/db'
-import { attendanceRecords, classSessions, courseRoster, courses, enrollments, users } from '@/db/schema'
+import { attendanceRecords, classSessions, courseFaculty, courseRoster, courses, enrollments, users } from '@/db/schema'
 import { auth } from '@/lib/auth'
 import { getCurrentUser } from '@/lib/currentUser'
 import { BookOpen, ClipboardList } from 'lucide-react'
@@ -59,7 +59,7 @@ async function StudentHome({ email }: { email: string }) {
 
   // Percentages count finished sessions only -- a class that is still running
   // would otherwise read as a miss for everyone who hasn't scanned yet.
-  const [live, held, attended] = await Promise.all([
+  const [live, held, attended, instructors] = await Promise.all([
     db
       .select({ id: classSessions.id, courseId: classSessions.courseId })
       .from(classSessions)
@@ -81,11 +81,23 @@ async function StudentHome({ email }: { email: string }) {
         ),
       )
       .groupBy(classSessions.courseId),
+    db
+      .select({ courseId: courseFaculty.courseId, name: users.name })
+      .from(courseFaculty)
+      .innerJoin(users, eq(users.email, courseFaculty.facultyEmail))
+      .where(inArray(courseFaculty.courseId, ids))
+      .orderBy(users.name),
   ])
 
   const liveByCourse = new Map(live.map((s) => [s.courseId, s.id]))
   const heldByCourse = new Map(held.map((r) => [r.courseId, r.n]))
   const attendedByCourse = new Map(attended.map((r) => [r.courseId, r.n]))
+  const facultyByCourse = new Map<string, string[]>()
+  for (const instructor of instructors) {
+    const names = facultyByCourse.get(instructor.courseId) ?? []
+    names.push(instructor.name)
+    facultyByCourse.set(instructor.courseId, names)
+  }
 
   return (
     <>
@@ -121,7 +133,10 @@ async function StudentHome({ email }: { email: string }) {
                 <div>
                   <p className="font-mono text-sm font-medium text-card-foreground">{course.code}</p>
                   <p className="mt-0.5 text-sm text-muted-foreground">{course.title}</p>
-                  <p className="meta mt-2">Professor {course.facultyName}</p>
+                  <p className="meta mt-2">
+                    {(facultyByCourse.get(course.id)?.length ?? 0) > 1 ? 'Professors' : 'Professor'}{' '}
+                    {facultyByCourse.get(course.id)?.join(', ') ?? course.facultyName}
+                  </p>
                 </div>
                 {liveByCourse.has(course.id) && <StatusChip tone="live">Live</StatusChip>}
               </div>
@@ -153,8 +168,9 @@ async function StudentHome({ email }: { email: string }) {
 async function FacultyHome({ email, name }: { email: string; name: string }) {
   const mine = await db
     .select({ id: courses.id, code: courses.code, title: courses.title })
-    .from(courses)
-    .where(eq(courses.facultyEmail, email))
+    .from(courseFaculty)
+    .innerJoin(courses, eq(courses.id, courseFaculty.courseId))
+    .where(eq(courseFaculty.facultyEmail, email))
     .orderBy(courses.code)
 
   if (!mine.length) {

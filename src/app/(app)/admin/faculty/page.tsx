@@ -2,7 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { count, eq, isNull } from 'drizzle-orm'
 import { MailCheck, Users } from 'lucide-react'
 import { db } from '@/db'
-import { courses, facultyInvites, users } from '@/db/schema'
+import { courseFaculty, facultyInvites, users } from '@/db/schema'
 import { auth } from '@/lib/auth'
 import { getCurrentUser } from '@/lib/currentUser'
 import EmptyState from '@/components/EmptyState'
@@ -29,9 +29,9 @@ export default async function FacultyAccessPage() {
 
   const [faculty, invited] = await Promise.all([
     db
-      .select({ email: users.email, name: users.name, courses: count(courses.id) })
+      .select({ email: users.email, name: users.name, courses: count(courseFaculty.courseId) })
       .from(users)
-      .leftJoin(courses, eq(courses.facultyEmail, users.email))
+      .leftJoin(courseFaculty, eq(courseFaculty.facultyEmail, users.email))
       .where(eq(users.role, 'faculty'))
       .groupBy(users.email, users.name)
       .orderBy(users.name),
