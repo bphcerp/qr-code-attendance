@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { MapPin, RefreshCw, Search } from 'lucide-react'
+import { MapPin, QrCode, RefreshCw, Search } from 'lucide-react'
 import ProjectorDisplay from './ProjectorDisplay'
 import StatusChip from './StatusChip'
 import { Button } from '@/components/ui/button'
@@ -276,106 +276,117 @@ export default function SessionControl({
       )}
 
       {!activeSession ? (
-        <div className="animate-in fade-in-0 rounded-lg border border-border bg-card p-5 duration-150 sm:p-6">
-          <div>
-            <p className="text-lg font-bold text-card-foreground">Start attendance</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              The live QR and student timestamps will appear here as soon as the session starts.
-            </p>
+        <section className="animate-in fade-in-0 overflow-hidden rounded-xl border border-border bg-card shadow-[var(--shadow)] duration-150">
+          <div className="flex items-start gap-3 border-b border-border p-5 sm:p-6">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+              <QrCode aria-hidden="true" className="size-5" />
+            </span>
+            <div>
+              <h2 className="text-xl">Start attendance</h2>
+              <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                Choose how the QR behaves, then begin. The live code and student timestamps stay on this page.
+              </p>
+            </div>
           </div>
 
-          <div className="mt-6 grid gap-5 md:grid-cols-2">
-            <label className="block">
-              <span className="text-sm font-medium text-card-foreground">QR mode</span>
-              <div
-                className="mt-2 inline-flex rounded-md border border-input p-1"
-                role="radiogroup"
-                aria-label="QR mode"
-              >
+          <div className="grid divide-y divide-border lg:grid-cols-[1.15fr_0.85fr] lg:divide-x lg:divide-y-0">
+            <fieldset className="min-w-0 p-5 sm:p-6">
+              <legend className="text-sm font-semibold text-card-foreground">QR security</legend>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="QR mode">
                 <button
                   type="button"
                   role="radio"
                   aria-checked={qrMode === 'rotating'}
                   onClick={() => setQrMode('rotating')}
-                  className={
+                  className={`rounded-lg border p-4 text-left transition-[border-color,background-color,box-shadow] ${
                     qrMode === 'rotating'
-                      ? 'rounded-sm bg-accent px-3 py-1.5 text-sm font-bold text-accent-foreground'
-                      : 'rounded-sm px-3 py-1.5 text-sm font-medium text-muted-foreground'
-                  }
+                      ? 'border-primary bg-accent shadow-sm'
+                      : 'border-border bg-background hover:border-primary/50'
+                  }`}
                 >
-                  Rotating
+                  <span className="block text-sm font-bold text-card-foreground">Rotating QR</span>
+                  <span className="mt-1 block text-sm text-muted-foreground">Changes every few seconds for stronger protection.</span>
                 </button>
                 <button
                   type="button"
                   role="radio"
                   aria-checked={qrMode === 'static'}
                   onClick={() => setQrMode('static')}
-                  className={
+                  className={`rounded-lg border p-4 text-left transition-[border-color,background-color,box-shadow] ${
                     qrMode === 'static'
-                      ? 'rounded-sm bg-accent px-3 py-1.5 text-sm font-bold text-accent-foreground'
-                      : 'rounded-sm px-3 py-1.5 text-sm font-medium text-muted-foreground'
-                  }
+                      ? 'border-primary bg-accent shadow-sm'
+                      : 'border-border bg-background hover:border-primary/50'
+                  }`}
                 >
-                  Static
+                  <span className="block text-sm font-bold text-card-foreground">Static QR</span>
+                  <span className="mt-1 block text-sm text-muted-foreground">Stays fixed when rotation is impractical.</span>
                 </button>
               </div>
 
-              {qrMode === 'rotating' ? (
-                <>
+              <label className="mt-4 block rounded-lg bg-muted/50 p-4">
+                <span className="text-sm font-medium text-card-foreground">
+                  {qrMode === 'rotating' ? 'Rotate every' : 'Keep active for'}
+                </span>
+                <div className="mt-2 flex items-center gap-3">
                   <input
                     type="number"
-                    min={3}
-                    max={30}
-                    value={rotationSeconds}
-                    onChange={(event) => setRotationSeconds(Number(event.target.value))}
-                    aria-label="QR rotates every (seconds)"
-                    className="mt-3 w-full rounded-md border border-input bg-background px-3 py-2.5 font-mono text-card-foreground outline-none focus:border-ring"
+                    min={qrMode === 'rotating' ? 3 : 1}
+                    max={qrMode === 'rotating' ? 30 : STATIC_MINUTES_MAX}
+                    value={qrMode === 'rotating' ? rotationSeconds : staticMinutes}
+                    onChange={(event) => {
+                      const value = Number(event.target.value)
+                      if (qrMode === 'rotating') setRotationSeconds(value)
+                      else setStaticMinutes(value)
+                    }}
+                    className="h-10 w-24 rounded-md border border-input bg-background px-3 font-mono text-card-foreground outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                   />
-                  <span className="meta mt-1.5 block">Seconds between secure QR rotations</span>
-                </>
-              ) : (
-                <>
-                  <input
-                    type="number"
-                    min={1}
-                    max={STATIC_MINUTES_MAX}
-                    value={staticMinutes}
-                    onChange={(event) => setStaticMinutes(Number(event.target.value))}
-                    aria-label="Stays the same for (minutes)"
-                    className="mt-3 w-full rounded-md border border-input bg-background px-3 py-2.5 font-mono text-card-foreground outline-none focus:border-ring"
-                  />
-                  <span className="meta mt-1.5 block text-destructive">
-                    Screenshots work for all {staticMinutes} minutes. Use the shortest practical window.
+                  <span className="text-sm text-muted-foreground">
+                    {qrMode === 'rotating' ? 'seconds' : 'minutes'}
                   </span>
-                </>
-              )}
-            </label>
+                </div>
+                <span className={`mt-2 block text-sm ${qrMode === 'static' ? 'text-destructive' : 'text-muted-foreground'}`}>
+                  {qrMode === 'rotating'
+                    ? 'Five seconds is recommended for most classrooms.'
+                    : `Screenshots remain valid for all ${staticMinutes} minutes.`}
+                </span>
+              </label>
+            </fieldset>
 
-            <div>
-              <span className="text-sm font-medium text-card-foreground">Room location</span>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Optional. Setting it lets the dashboard flag scans far from the classroom.
+            <div className="flex min-w-0 flex-col p-5 sm:p-6">
+              <div className="flex items-center gap-2">
+                <MapPin aria-hidden="true" className="size-4 text-primary" />
+                <h3 className="text-sm font-semibold text-card-foreground">Classroom location</h3>
+                <span className="meta">Optional</span>
+              </div>
+              <p className="mt-3 text-sm text-muted-foreground">
+                Add this device&rsquo;s location to flag scans that happen far from the room.
               </p>
-              <Button variant="outline" className="mt-3" onClick={useMyLocation}>
+              <Button variant="outline" className="mt-4 w-full sm:w-fit" onClick={useMyLocation}>
                 <MapPin />
                 {room ? 'Update location' : 'Use this location'}
               </Button>
-              <p className="meta mt-2">
-                {room ? `${room.lat.toFixed(5)}, ${room.lng.toFixed(5)}` : 'No location set'}
+              <p className="meta mt-3 break-all">
+                {room ? `${room.lat.toFixed(5)}, ${room.lng.toFixed(5)}` : 'No location added'}
               </p>
             </div>
           </div>
 
-          <Button
-            size="lg"
-            className="mt-7 h-12 w-full text-base sm:w-auto sm:px-8"
-            disabled={busy}
-            onClick={start}
-          >
-            {busyAction === 'start' && <Spinner />}
-            {busyAction === 'start' ? 'Starting session…' : 'Start session'}
-          </Button>
-        </div>
+          <div className="flex flex-col gap-4 border-t border-border bg-muted/30 p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <div>
+              <p className="text-sm font-semibold text-card-foreground">Ready for class</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">The QR appears immediately after you start.</p>
+            </div>
+            <Button
+              size="lg"
+              className="h-12 w-full text-base sm:w-auto sm:min-w-48 sm:px-8"
+              disabled={busy}
+              onClick={start}
+            >
+              {busyAction === 'start' ? <Spinner /> : <QrCode />}
+              {busyAction === 'start' ? 'Starting attendance…' : 'Start attendance'}
+            </Button>
+          </div>
+        </section>
       ) : (
         <div className="animate-in fade-in-0 duration-150">
           <div className="space-y-4">

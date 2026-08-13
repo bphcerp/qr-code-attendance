@@ -1,10 +1,7 @@
-import { and, eq, inArray } from 'drizzle-orm'
-import { db } from '@/db'
-import { courseRoster, enrollments } from '@/db/schema'
 import { errorResponse, requireCourseAccess, HttpError } from '@/lib/guards'
 import { normalizeStudentId } from '@/lib/studentId'
 import { searchStudentDirectory } from '@/lib/studentDirectory'
-import { addDirectoryStudent, removeRosterStudent } from '@/lib/courseRoster'
+import { addDirectoryStudent, removeRosterStudent, replaceCourseRoster } from '@/lib/courseRoster'
 
 type IncomingRow = { studentId?: unknown; studentName?: unknown }
 
@@ -40,27 +37,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ courseI
       }
       if (seen.has(key)) throw new HttpError(400, 'duplicate_student_id')
       seen.add(key)
-      return { courseId, studentId, studentName }
+      return { studentId, studentName }
     })
 
-    await db.transaction(async (tx) => {
-      const existing = await tx
-        .select({ email: enrollments.studentEmail })
-        .from(enrollments)
-        .where(eq(enrollments.courseId, courseId))
-      await tx.delete(courseRoster).where(eq(courseRoster.courseId, courseId))
-      await tx.insert(courseRoster).values(rows)
-
-      const currentIds = new Set(rows.map((row) => normalizeStudentId(row.studentId)))
-      const staleEmails = existing
-        .filter((row) => !currentIds.has(normalizeStudentId(row.email.split('@')[0] ?? '')))
-        .map((row) => row.email)
-      if (staleEmails.length) {
-        await tx
-          .delete(enrollments)
-          .where(and(eq(enrollments.courseId, courseId), inArray(enrollments.studentEmail, staleEmails)))
-      }
-    })
+    await replaceCourseRoster(courseId, rows)
 
     return Response.json({ ok: true, count: rows.length })
   } catch (err) {

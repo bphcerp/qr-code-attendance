@@ -11,7 +11,6 @@ type DirectoryStudent = {
   email: string
   fullName: string
   batch: number | null
-  hasAccount: boolean
   alreadyAdded: boolean
 }
 
@@ -167,7 +166,7 @@ export default function CourseRosterUpload({
           <div>
             <h2 className="text-lg">Student roster</h2>
             <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-              Add students from the March 2026 mess register, or upload a complete Excel or CSV roster.
+              Add students before or after they sign in, or upload a complete Excel or CSV roster.
             </p>
           </div>
         </div>
@@ -202,7 +201,7 @@ export default function CourseRosterUpload({
           <div id="student-directory-results" aria-live="polite" className="mt-2 overflow-hidden rounded-md border border-border">
             {searching && <p className="px-3 py-3 text-sm text-muted-foreground">Searching…</p>}
             {!searching && results.length === 0 && (
-              <p className="px-3 py-3 text-sm text-muted-foreground">No mess-register match found.</p>
+              <p className="px-3 py-3 text-sm text-muted-foreground">No student found.</p>
             )}
             {!searching && results.length > 0 && (
               <ul aria-label="Student search results">
@@ -213,7 +212,6 @@ export default function CourseRosterUpload({
                       <p className="truncate text-xs text-muted-foreground">
                         {student.email.split('@')[0]}
                         {student.batch ? ` · ${student.batch}` : ''}
-                        {!student.hasAccount ? ' · not signed in yet' : ''}
                       </p>
                     </div>
                     <Button

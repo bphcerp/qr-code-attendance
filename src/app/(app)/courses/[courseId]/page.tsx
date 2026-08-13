@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { and, count, eq, inArray, isNotNull } from 'drizzle-orm'
+import { and, count, desc, eq, inArray, isNotNull } from 'drizzle-orm'
 import { db } from '@/db'
 import { attendanceRecords, classSessions, courseRoster, courses, enrollments, users } from '@/db/schema'
 import { auth } from '@/lib/auth'
@@ -40,7 +40,7 @@ export default async function CoursePage({
       .select({ id: classSessions.id, startedAt: classSessions.startedAt, endedAt: classSessions.endedAt })
       .from(classSessions)
       .where(and(eq(classSessions.courseId, courseId), isNotNull(classSessions.endedAt)))
-      .orderBy(classSessions.startedAt),
+      .orderBy(desc(classSessions.startedAt)),
   ])
 
   if (!course || !enrolled) notFound()

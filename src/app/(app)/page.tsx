@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { and, count, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 import { db } from '@/db'
-import { attendanceRecords, classSessions, courses, enrollments, users } from '@/db/schema'
+import { attendanceRecords, classSessions, courseRoster, courses, enrollments, users } from '@/db/schema'
 import { auth } from '@/lib/auth'
 import { getCurrentUser } from '@/lib/currentUser'
 import { BookOpen, ClipboardList } from 'lucide-react'
@@ -173,11 +173,16 @@ async function FacultyHome({ email, name }: { email: string; name: string }) {
 
   const ids = mine.map((c) => c.id)
 
-  const [live, roster] = await Promise.all([
+  const [live, rosterCounts, enrollmentCounts] = await Promise.all([
     db
       .select({ id: classSessions.id, courseId: classSessions.courseId })
       .from(classSessions)
       .where(and(inArray(classSessions.courseId, ids), isNull(classSessions.endedAt))),
+    db
+      .select({ courseId: courseRoster.courseId, n: count() })
+      .from(courseRoster)
+      .where(inArray(courseRoster.courseId, ids))
+      .groupBy(courseRoster.courseId),
     db
       .select({ courseId: enrollments.courseId, n: count() })
       .from(enrollments)
@@ -186,7 +191,8 @@ async function FacultyHome({ email, name }: { email: string; name: string }) {
   ])
 
   const liveByCourse = new Set(live.map((s) => s.courseId))
-  const rosterByCourse = new Map(roster.map((r) => [r.courseId, r.n]))
+  const rosterByCourse = new Map(rosterCounts.map((row) => [row.courseId, row.n]))
+  const enrollmentByCourse = new Map(enrollmentCounts.map((row) => [row.courseId, row.n]))
 
   return (
     <>
@@ -211,7 +217,9 @@ async function FacultyHome({ email, name }: { email: string; name: string }) {
               </div>
               {liveByCourse.has(course.id) && <StatusChip tone="live">Live</StatusChip>}
             </div>
-            <p className="meta-lg mt-4">{rosterByCourse.get(course.id) ?? 0} students enrolled</p>
+            <p className="meta-lg mt-4">
+              {rosterByCourse.get(course.id) ?? enrollmentByCourse.get(course.id) ?? 0} students in roster
+            </p>
           </Link>
         ))}
       </div>

@@ -1,6 +1,6 @@
 import { or, sql } from 'drizzle-orm'
 import { db } from '@/db'
-import { courseRoster, studentDirectory, users } from '@/db/schema'
+import { courseRoster, studentDirectory } from '@/db/schema'
 
 export async function searchStudentDirectory(courseId: string, value: string) {
   const query = value.trim().toLowerCase()
@@ -21,11 +21,9 @@ export async function searchStudentDirectory(courseId: string, value: string) {
       email: studentDirectory.email,
       fullName: studentDirectory.fullName,
       batch: studentDirectory.batch,
-      hasAccount: sql<boolean>`${users.email} is not null`,
       alreadyAdded: sql<boolean>`${courseRoster.studentId} is not null`,
     })
     .from(studentDirectory)
-    .leftJoin(users, sql`lower(${users.email}) = ${studentDirectory.email}`)
     .leftJoin(courseRoster, rosterMatch)
     .where(or(nameStarts, wordStarts, emailStarts))
     .orderBy(

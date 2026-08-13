@@ -2,7 +2,7 @@ import { and, count, eq } from 'drizzle-orm'
 import postgres from 'postgres'
 import { db } from '../src/db'
 import { courseRoster, courses, enrollments, users } from '../src/db/schema'
-import { addDirectoryStudent, removeRosterStudent } from '../src/lib/courseRoster'
+import { addDirectoryStudent, removeRosterStudent, replaceCourseRoster } from '../src/lib/courseRoster'
 import { searchStudentDirectory } from '../src/lib/studentDirectory'
 
 const url = process.env.DATABASE_URL
@@ -45,7 +45,7 @@ async function main() {
     check('the application search returns ranked matches', ranked.length > 0 && ranked[0].fullName.startsWith('SANJAY'))
 
     await verifyCourseRosterOperations()
-    console.log(`${passed}/10 directory and roster checks passed`)
+    console.log(`${passed}/12 directory and roster checks passed`)
   } finally {
     await sql.end()
   }
@@ -102,6 +102,27 @@ async function verifyCourseRosterOperations() {
     check(
       'remove clears roster and enrollment and is safely repeatable',
       remainingRoster.count === 0 && remainingEnrollments.count === 0 && !await removeRosterStudent(course.id, DIRECTORY_ID),
+    )
+
+    await replaceCourseRoster(course.id, [{ studentId: DIRECTORY_ID, studentName: DIRECTORY_NAME }])
+    const [uploadedEnrollment] = await db
+      .select({ count: count() })
+      .from(enrollments)
+      .where(and(eq(enrollments.courseId, course.id), eq(enrollments.studentEmail, DIRECTORY_EMAIL)))
+    check('full roster upload immediately enrolls a matching account', uploadedEnrollment.count === 1)
+
+    await replaceCourseRoster(course.id, [{ studentId: 'f99999999', studentName: 'No Account Student' }])
+    const [replacedRoster] = await db
+      .select({ count: count() })
+      .from(courseRoster)
+      .where(eq(courseRoster.courseId, course.id))
+    const [replacedEnrollments] = await db
+      .select({ count: count() })
+      .from(enrollments)
+      .where(eq(enrollments.courseId, course.id))
+    check(
+      'replacement removes stale enrolments while retaining students without accounts',
+      replacedRoster.count === 1 && replacedEnrollments.count === 0,
     )
   } finally {
     await db.delete(courses).where(eq(courses.id, course.id))

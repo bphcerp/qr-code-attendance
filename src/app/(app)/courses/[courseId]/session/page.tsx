@@ -1,5 +1,5 @@
 import { notFound, redirect } from 'next/navigation'
-import { and, count, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
+import { and, count, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 import { db } from '@/db'
 import { attendanceRecords, classSessions, courseRoster, courses, enrollments } from '@/db/schema'
 import { auth } from '@/lib/auth'
@@ -60,7 +60,7 @@ export default async function SessionPage({
       .select({ id: classSessions.id, startedAt: classSessions.startedAt, endedAt: classSessions.endedAt })
       .from(classSessions)
       .where(and(eq(classSessions.courseId, courseId), isNotNull(classSessions.endedAt)))
-      .orderBy(classSessions.startedAt),
+      .orderBy(desc(classSessions.startedAt)),
   ])
 
   // 404 rather than 403 on someone else's course: a wrong answer here tells the
