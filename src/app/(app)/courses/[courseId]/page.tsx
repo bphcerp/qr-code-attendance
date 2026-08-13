@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { and, count, eq, inArray, isNotNull } from 'drizzle-orm'
 import { db } from '@/db'
-import { attendanceRecords, classSessions, courseRoster, courses, enrollments } from '@/db/schema'
+import { attendanceRecords, classSessions, courseRoster, courses, enrollments, users } from '@/db/schema'
 import { auth } from '@/lib/auth'
 import AttendanceHistory, { type HistoryRow } from '@/components/AttendanceHistory'
 
@@ -20,8 +20,9 @@ export default async function CoursePage({
 
   const [[course], [enrolled], [rosterCount], [enrollmentCount], sessions] = await Promise.all([
     db
-      .select({ code: courses.code, title: courses.title })
+      .select({ code: courses.code, title: courses.title, facultyName: users.name })
       .from(courses)
+      .innerJoin(users, eq(users.email, courses.facultyEmail))
       .where(eq(courses.id, courseId)),
     db
       .select({ courseId: enrollments.courseId })
@@ -72,6 +73,7 @@ export default async function CoursePage({
         </Link>
         <h1 className="page-title mt-5">{course.code}</h1>
         <p className="mt-1 text-muted-foreground">{course.title}</p>
+        <p className="meta mt-2">Professor {course.facultyName}</p>
       </div>
       <AttendanceHistory rows={history} studentView />
     </div>

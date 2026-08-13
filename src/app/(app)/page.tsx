@@ -2,13 +2,14 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { and, count, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 import { db } from '@/db'
-import { attendanceRecords, classSessions, courses, enrollments } from '@/db/schema'
+import { attendanceRecords, classSessions, courses, enrollments, users } from '@/db/schema'
 import { auth } from '@/lib/auth'
 import { getCurrentUser } from '@/lib/currentUser'
 import { BookOpen, ClipboardList } from 'lucide-react'
 import EmptyState from '@/components/EmptyState'
 import StatusChip from '@/components/StatusChip'
 import { Button } from '@/components/ui/button'
+import AddCourseForm from '@/components/AddCourseForm'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,14 +21,24 @@ export default async function HomePage() {
   const me = await getCurrentUser(email)
   if (!me) redirect('/login')
 
-  return me.role === 'student' ? <StudentHome email={email} /> : <FacultyHome email={email} />
+  return me.role === 'student' ? (
+    <StudentHome email={email} />
+  ) : (
+    <FacultyHome email={email} name={me.name} />
+  )
 }
 
 async function StudentHome({ email }: { email: string }) {
   const enrolled = await db
-    .select({ id: courses.id, code: courses.code, title: courses.title })
+    .select({
+      id: courses.id,
+      code: courses.code,
+      title: courses.title,
+      facultyName: users.name,
+    })
     .from(enrollments)
     .innerJoin(courses, eq(courses.id, enrollments.courseId))
+    .innerJoin(users, eq(users.email, courses.facultyEmail))
     .where(eq(enrollments.studentEmail, email))
     .orderBy(courses.code)
 
@@ -110,6 +121,7 @@ async function StudentHome({ email }: { email: string }) {
                 <div>
                   <p className="font-mono text-sm font-medium text-card-foreground">{course.code}</p>
                   <p className="mt-0.5 text-sm text-muted-foreground">{course.title}</p>
+                  <p className="meta mt-2">Professor {course.facultyName}</p>
                 </div>
                 {liveByCourse.has(course.id) && <StatusChip tone="live">Live</StatusChip>}
               </div>
@@ -138,7 +150,7 @@ async function StudentHome({ email }: { email: string }) {
   )
 }
 
-async function FacultyHome({ email }: { email: string }) {
+async function FacultyHome({ email, name }: { email: string; name: string }) {
   const mine = await db
     .select({ id: courses.id, code: courses.code, title: courses.title })
     .from(courses)
@@ -151,8 +163,9 @@ async function FacultyHome({ email }: { email: string }) {
         <div className="my-8">
           <h1 className="page-title">Your courses</h1>
         </div>
+        <AddCourseForm professorName={name} />
         <EmptyState icon={ClipboardList} title="No assigned courses">
-          No courses are assigned to this account yet. Ask an administrator to assign one.
+          Add your first course above to start taking attendance.
         </EmptyState>
       </>
     )
@@ -181,6 +194,8 @@ async function FacultyHome({ email }: { email: string }) {
         <h1 className="page-title">Your courses</h1>
       </div>
 
+      <AddCourseForm professorName={name} />
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {mine.map((course) => (
           <Link
@@ -192,6 +207,7 @@ async function FacultyHome({ email }: { email: string }) {
               <div>
                 <p className="font-mono text-sm font-medium text-card-foreground">{course.code}</p>
                 <p className="mt-0.5 text-sm text-muted-foreground">{course.title}</p>
+                <p className="meta mt-2">Professor {name}</p>
               </div>
               {liveByCourse.has(course.id) && <StatusChip tone="live">Live</StatusChip>}
             </div>
