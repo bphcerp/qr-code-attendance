@@ -29,6 +29,20 @@
       "when": 1786554973664,
       "tag": "0003_lame_slyde",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786612339408,
+      "tag": "0004_security_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786612370526,
+      "tag": "0005_privacy_and_access_controls",
+      "breakpoints": true
     }
   ]
 }

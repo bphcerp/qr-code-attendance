@@ -166,7 +166,7 @@ export default function CourseRosterUpload({
           <div>
             <h2 className="text-lg">Student roster</h2>
             <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-              Add students before or after they sign in, or upload a complete Excel or CSV roster.
+              Add students before or after they sign in, or upload a complete XLSX, CSV, or TSV roster.
             </p>
           </div>
         </div>
@@ -236,7 +236,7 @@ export default function CourseRosterUpload({
         <input
           ref={inputRef}
           type="file"
-          accept=".xls,.xlsx,.csv,.tsv"
+          accept=".xlsx,.csv,.tsv"
           className="sr-only"
           onChange={(event) => {
             const file = event.target.files?.[0]

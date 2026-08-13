@@ -75,11 +75,11 @@ export async function fetchDisplayToken(sessionId: string, token: string) {
  * reported. Don't reorder that: it's what keeps a caller from learning a
  * session is still open by how a bad token fails, or vice versa.
  */
-export function assertTokenValid(row: DisplayTokenRow | undefined, ip: string | null) {
+export function assertTokenValid(row: DisplayTokenRow | undefined, networkHash: string) {
   if (!row) throw new HttpError(403, 'display_token_invalid')
   if (row.revokedAt) throw new HttpError(403, 'display_token_revoked')
   if (row.expiresAt.getTime() < Date.now()) throw new HttpError(403, 'display_token_expired')
-  if (row.pinnedIp && row.pinnedIp !== ip) {
+  if (row.pinnedNetworkHash && row.pinnedNetworkHash !== networkHash) {
     throw new HttpError(403, 'display_token_wrong_device')
   }
   return row
@@ -93,18 +93,21 @@ export function assertTokenValid(row: DisplayTokenRow | undefined, ip: string | 
  * would fail loudly and the lecturer would notice immediately -- which is why
  * this returns a distinct error rather than silently reissuing.
  */
-export async function finalizeRedemption(row: DisplayTokenRow, ip: string | null) {
+export async function finalizeRedemption(row: DisplayTokenRow, networkHash: string) {
   await db
     .update(displayTokens)
-    .set({ lastPingAt: new Date(), ...(row.pinnedIp ? {} : { pinnedIp: ip }) })
+    .set({
+      lastPingAt: new Date(),
+      ...(row.pinnedNetworkHash ? {} : { pinnedNetworkHash: networkHash }),
+    })
     .where(eq(displayTokens.id, row.id))
 
-  if (!row.pinnedIp) {
+  if (!row.pinnedNetworkHash) {
     await db.insert(auditLog).values({
       actorEmail: row.issuedByEmail,
       action: 'display_token.redeem',
       subject: row.sessionId,
-      ip,
+      networkHash,
     })
   }
 }

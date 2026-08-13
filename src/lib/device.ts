@@ -33,10 +33,10 @@ export async function activeDeviceFor(userEmail: string) {
   return row ?? null
 }
 
-export async function registerDevice(userEmail: string, fingerprint: string, ua: string | null) {
+export async function registerDevice(userEmail: string, fingerprintHash: string) {
   const [row] = await db
     .insert(devices)
-    .values({ userEmail, fingerprint, userAgent: ua })
+    .values({ userEmail, fingerprintHash })
     .returning()
   return row
 }
@@ -56,8 +56,7 @@ export type DeviceCheck =
 export async function checkDevice(
   userEmail: string,
   cookieValue: string | undefined,
-  fingerprint: string,
-  ua: string | null,
+  fingerprintHash: string,
 ): Promise<DeviceCheck> {
   const cookieDeviceId = parseDeviceCookie(cookieValue)
 
@@ -78,7 +77,7 @@ export async function checkDevice(
   const active = await activeDeviceFor(userEmail)
 
   if (!active) {
-    const created = await registerDevice(userEmail, fingerprint, ua)
+    const created = await registerDevice(userEmail, fingerprintHash)
     return { ok: true, deviceId: created.id, justRegistered: true, recentlyRebound: false }
   }
 

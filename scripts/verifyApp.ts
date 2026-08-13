@@ -107,7 +107,7 @@ async function main() {
   const facultyHtml = await (await get('/', profCookie)).text()
   check(
     'faculty home lists their course',
-    facultyHtml.includes(`CS F${stamp % 1000}`) && facultyHtml.includes('students enrolled'),
+    facultyHtml.includes(`CS F${stamp % 1000}`) && facultyHtml.includes('students in roster'),
   )
   check('faculty home links to the session control page', facultyHtml.includes(`/courses/${course.id}/session`))
 
@@ -116,14 +116,42 @@ async function main() {
     'faculty can open their own session page',
     (await get(`/courses/${course.id}/session`, profCookie)).status === 200,
   )
+  const otherFacultyPage = await get(`/courses/${course.id}/session`, otherCookie)
+  const otherFacultyHtml = await otherFacultyPage.text()
   check(
-    "another faculty gets 404 on someone else's course",
-    (await get(`/courses/${course.id}/session`, otherCookie)).status === 404,
+    "another faculty cannot see someone else's course",
+    !otherFacultyHtml.includes('Data Structures') && !otherFacultyHtml.includes('Student roster'),
+    String(otherFacultyPage.status),
   )
+  const studentFacultyPage = await get(`/courses/${course.id}/session`, studentCookie)
+  const studentFacultyHtml = await studentFacultyPage.text()
   check(
-    'a student gets 404 on the session page',
-    (await get(`/courses/${course.id}/session`, studentCookie)).status === 404,
+    'a student cannot see the faculty session page',
+    !studentFacultyHtml.includes('Data Structures') && !studentFacultyHtml.includes('Student roster'),
+    String(studentFacultyPage.status),
   )
+
+  console.log('\nMalformed input')
+  const malformedUuid = await get('/api/sessions/not-a-uuid/token?dt=x')
+  check('malformed session UUID is rejected', malformedUuid.status === 400, String(malformedUuid.status))
+  const wrongType = await fetch(`${BASE}/api/courses/${course.id}/sessions`, {
+    method: 'POST',
+    headers: { cookie: profCookie, 'content-type': 'text/plain' },
+    body: '{}',
+  })
+  check('non-JSON mutation payload is rejected', wrongType.status === 415, String(wrongType.status))
+  const oversized = await fetch(`${BASE}/api/courses/${course.id}/sessions`, {
+    method: 'POST',
+    headers: { cookie: profCookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ padding: 'x'.repeat(5000) }),
+  })
+  check('oversized mutation payload is rejected', oversized.status === 413, String(oversized.status))
+  const invalidCount = await fetch(`${BASE}/api/courses/${course.id}/sessions`, {
+    method: 'POST',
+    headers: { cookie: profCookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ declaredDisplayCount: 0 }),
+  })
+  check('invalid display count is rejected', invalidCount.status === 400, String(invalidCount.status))
 
   console.log('\nStarting a session over HTTP')
   const started = await fetch(`${BASE}/api/courses/${course.id}/sessions`, {
@@ -198,7 +226,7 @@ async function main() {
   const counter = currentCounter(secretRow.startedAt, 5)
   const token = deriveQrToken(secretRow.secret, session.id, counter)
 
-  const ONE_PHONE = 'fp-single-handset'
+  const ONE_PHONE = '11111111111111111111111111111111'
   const mark = (cookie: string, fingerprint: string) =>
     fetch(`${BASE}/api/attendance/mark`, {
       method: 'POST',
@@ -221,7 +249,7 @@ async function main() {
   const repeat = await mark(`${studentCookie}; ${deviceCookie}`, ONE_PHONE)
   check('the same student scanning twice is already_marked', repeat.status === 409)
 
-  const strangerPhone = await mark(student2Cookie, 'fp-some-other-handset')
+  const strangerPhone = await mark(student2Cookie, '22222222222222222222222222222222')
   check('a student who already marked cannot mark again elsewhere', strangerPhone.status !== 200)
 
   const raised = await db

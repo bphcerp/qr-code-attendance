@@ -3,6 +3,7 @@ import { db } from '../src/db'
 import { users, courses, classSessions, displayTokens } from '../src/db/schema'
 import { newSessionSecret } from '../src/lib/token'
 import { issueDisplayToken, activeDisplayCount, revokeDisplayTokens } from '../src/lib/displayToken'
+import { securityHash } from '../src/lib/security'
 
 const BASE = process.env.BASE_URL ?? 'http://localhost:3001'
 const FACULTY = 'prof.test@hyderabad.bits-pilani.ac.in'
@@ -55,8 +56,13 @@ async function main() {
   check('response carries nextRotationAt', Boolean(first.body.nextRotationAt))
 
   console.log('\nIP pinning')
-  const [pinned] = await db.select({ pinnedIp: displayTokens.pinnedIp }).from(displayTokens).where(eq(displayTokens.sessionId, session.id))
-  check('first redemption pins the IP', pinned.pinnedIp === '10.0.0.1', String(pinned.pinnedIp))
+  const [pinned] = await db.select({ pinnedNetworkHash: displayTokens.pinnedNetworkHash }).from(displayTokens).where(eq(displayTokens.sessionId, session.id))
+  const expectedNetworkHash = securityHash('network', '10.0.0.1')
+  check(
+    'first redemption pins a keyed network hash',
+    pinned.pinnedNetworkHash === expectedNetworkHash,
+    String(pinned.pinnedNetworkHash),
+  )
   const other = await get(url(token), '203.0.113.9')
   check('same token from another IP is rejected', other.status === 403, JSON.stringify(other.body))
   check('rejection names the reason', other.body.error === 'display_token_wrong_device', String(other.body.error))

@@ -11,12 +11,14 @@ import {
   primaryKey,
   uniqueIndex,
   index,
+  pgSchema,
 } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 
 export const roleEnum = pgEnum('role', ['student', 'faculty', 'admin'])
 export const attendanceSourceEnum = pgEnum('attendance_source', ['qr', 'code', 'manual'])
 export const requestStatusEnum = pgEnum('request_status', ['pending', 'approved', 'rejected'])
+export const privateSchema = pgSchema('private')
 
 export const users = pgTable('users', {
   email: varchar('email').primaryKey(),
@@ -33,8 +35,7 @@ export const devices = pgTable(
     userEmail: varchar('user_email')
       .notNull()
       .references(() => users.email, { onDelete: 'cascade' }),
-    fingerprint: varchar('fingerprint').notNull(),
-    userAgent: text('user_agent'),
+    fingerprintHash: varchar('fingerprint_hash'),
     registeredAt: timestamp('registered_at', { withTimezone: true }).notNull().defaultNow(),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
   },
@@ -141,7 +142,7 @@ export const displayTokens = pgTable(
     tokenHash: varchar('token_hash').notNull().unique(),
     // null until first redemption, then pinned. A leaked link is already bound
     // to the podium PC by the time a student could try it.
-    pinnedIp: varchar('pinned_ip'),
+    pinnedNetworkHash: varchar('pinned_network_hash'),
     issuedByEmail: varchar('issued_by_email')
       .notNull()
       .references(() => users.email),
@@ -169,12 +170,7 @@ export const attendanceRecords = pgTable(
     markedAt: timestamp('marked_at', { withTimezone: true }).notNull().defaultNow(),
     source: attendanceSourceEnum('source').notNull(),
     deviceId: uuid('device_id').references(() => devices.id),
-    fingerprint: varchar('fingerprint'),
-    ip: varchar('ip'),
-    userAgent: text('user_agent'),
-    lat: doublePrecision('lat'),
-    lng: doublePrecision('lng'),
-    accuracy: doublePrecision('accuracy'),
+    fingerprintHash: varchar('fingerprint_hash'),
     markedByEmail: varchar('marked_by_email').references(() => users.email),
     reason: text('reason'),
   },
@@ -185,7 +181,7 @@ export const attendanceRecords = pgTable(
       table.sessionId,
       table.studentEmail,
     ),
-    index('attendance_fingerprint_idx').on(table.sessionId, table.fingerprint),
+    index('attendance_fingerprint_hash_idx').on(table.sessionId, table.fingerprintHash),
   ],
 )
 
@@ -247,8 +243,22 @@ export const auditLog = pgTable(
     action: varchar('action').notNull(),
     subject: varchar('subject'),
     detail: jsonb('detail').$type<Record<string, unknown>>(),
-    ip: varchar('ip'),
+    networkHash: varchar('network_hash'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index('audit_log_created_idx').on(table.createdAt)],
+)
+
+export const rateLimitBuckets = privateSchema.table(
+  'rate_limit_buckets',
+  {
+    scope: varchar('scope').notNull(),
+    keyHash: varchar('key_hash').notNull(),
+    windowStart: timestamp('window_start', { withTimezone: true }).notNull(),
+    count: integer('count').notNull().default(1),
+  },
+  (table) => [
+    primaryKey({ columns: [table.scope, table.keyHash, table.windowStart] }),
+    index('rate_limit_window_idx').on(table.windowStart),
+  ],
 )

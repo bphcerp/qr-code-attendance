@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next'
+import { headers } from 'next/headers'
 import { Montserrat, Manrope, IBM_Plex_Mono } from 'next/font/google'
 import { ThemeProvider } from '@/context/ThemeContext'
 import { THEME_COLORS } from '@/lib/theme'
@@ -50,7 +51,9 @@ try {
 } catch (e) {}
 `
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const nonce = (await headers()).get('x-nonce') ?? undefined
+
   return (
     <html
       lang="en"
@@ -59,7 +62,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <head>
         <meta name="theme-color" content={THEME_COLORS['amber-light']} />
-        <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
       </head>
       <body>
         <ThemeProvider>{children}</ThemeProvider>

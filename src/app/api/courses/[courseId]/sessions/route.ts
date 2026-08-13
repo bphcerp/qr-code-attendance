@@ -4,16 +4,32 @@ import { classSessions } from '@/db/schema'
 import { errorResponse, requireCourseAccess, HttpError } from '@/lib/guards'
 import { newSessionSecret, isValidRotationSeconds } from '@/lib/token'
 import { issueDisplayToken } from '@/lib/displayToken'
+import { enforceRateLimit } from '@/lib/rateLimit'
+import { securityHash } from '@/lib/security'
+import { optionalFiniteNumber, readJsonObject, requireUuid } from '@/lib/validation'
 
 export async function POST(req: Request, { params }: { params: Promise<{ courseId: string }> }) {
   try {
-    const { courseId } = await params
+    const { courseId: rawCourseId } = await params
+    const courseId = requireUuid(rawCourseId)
     const { email } = await requireCourseAccess(courseId)
+    await enforceRateLimit({
+      scope: 'session_mutation',
+      keyHash: securityHash('account', email),
+      limit: 20,
+      windowSeconds: 60,
+    })
 
-    const body = await req.json().catch(() => ({}))
-    const rotationSeconds = Number(body.rotationSeconds) || 5
+    const body = await readJsonObject(req, 4096)
+    const rotationSeconds = body.rotationSeconds == null ? 5 : Number(body.rotationSeconds)
     if (!isValidRotationSeconds(rotationSeconds)) throw new HttpError(400, 'invalid_rotation_seconds')
-    const declaredDisplayCount = Number(body.declaredDisplayCount) || 1
+    const declaredDisplayCount = body.declaredDisplayCount == null ? 1 : Number(body.declaredDisplayCount)
+    if (!Number.isInteger(declaredDisplayCount) || declaredDisplayCount < 1 || declaredDisplayCount > 20) {
+      throw new HttpError(400, 'invalid_display_count')
+    }
+    const roomLat = optionalFiniteNumber(body.roomLat, -90, 90)
+    const roomLng = optionalFiniteNumber(body.roomLng, -180, 180)
+    if ((roomLat == null) !== (roomLng == null)) throw new HttpError(400, 'bad_request')
 
     // One open session per course at a time. Two live sessions would each hand
     // out valid tokens for the same room, and a student marking against the
@@ -31,8 +47,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ courseI
         secret: newSessionSecret(),
         rotationSeconds,
         declaredDisplayCount,
-        roomLat: body.roomLat ?? null,
-        roomLng: body.roomLng ?? null,
+        roomLat,
+        roomLng,
       })
       .returning({ id: classSessions.id, startedAt: classSessions.startedAt })
 

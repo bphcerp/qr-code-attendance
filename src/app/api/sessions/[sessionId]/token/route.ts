@@ -1,5 +1,8 @@
 import { errorResponse, HttpError } from '@/lib/guards'
 import { clientIp } from '@/lib/request'
+import { securityHash } from '@/lib/security'
+import { enforceRateLimit } from '@/lib/rateLimit'
+import { requireUuid } from '@/lib/validation'
 import {
   fetchSession,
   assertSessionOpen,
@@ -22,11 +25,18 @@ export const dynamic = 'force-dynamic'
  */
 export async function GET(req: Request, { params }: { params: Promise<{ sessionId: string }> }) {
   try {
-    const { sessionId } = await params
+    const { sessionId: rawSessionId } = await params
+    const sessionId = requireUuid(rawSessionId)
     const dt = new URL(req.url).searchParams.get('dt')
     if (!dt) throw new HttpError(403, 'display_token_missing')
 
-    const ip = clientIp(req)
+    const networkHash = securityHash('network', clientIp(req) ?? 'unavailable')
+    await enforceRateLimit({
+      scope: 'display_poll',
+      keyHash: networkHash,
+      limit: 60,
+      windowSeconds: 60,
+    })
 
     // Both reads are independent, so fire them together -- this endpoint is
     // polled continuously by every open display for the whole lecture, so the
@@ -39,8 +49,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ sessionI
       fetchDisplayToken(sessionId, dt),
     ])
     const session = assertSessionOpen(sessionRow)
-    const validToken = assertTokenValid(tokenRow, ip)
-    await finalizeRedemption(validToken, ip)
+    const validToken = assertTokenValid(tokenRow, networkHash)
+    await finalizeRedemption(validToken, networkHash)
 
     const counter = currentCounter(session.startedAt, session.rotationSeconds)
 

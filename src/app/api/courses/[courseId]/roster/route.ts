@@ -2,13 +2,23 @@ import { errorResponse, requireCourseAccess, HttpError } from '@/lib/guards'
 import { normalizeStudentId } from '@/lib/studentId'
 import { searchStudentDirectory } from '@/lib/studentDirectory'
 import { addDirectoryStudent, removeRosterStudent, replaceCourseRoster } from '@/lib/courseRoster'
+import { enforceRateLimit } from '@/lib/rateLimit'
+import { securityHash } from '@/lib/security'
+import { readJsonObject, requireUuid } from '@/lib/validation'
 
 type IncomingRow = { studentId?: unknown; studentName?: unknown }
 
 export async function GET(req: Request, { params }: { params: Promise<{ courseId: string }> }) {
   try {
-    const { courseId } = await params
-    await requireCourseAccess(courseId)
+    const { courseId: rawCourseId } = await params
+    const courseId = requireUuid(rawCourseId)
+    const { email } = await requireCourseAccess(courseId)
+    await enforceRateLimit({
+      scope: 'directory_search',
+      keyHash: securityHash('account', email),
+      limit: 120,
+      windowSeconds: 60,
+    })
     const query = new URL(req.url).searchParams.get('q') ?? ''
     const students = await searchStudentDirectory(courseId, query)
 
@@ -20,9 +30,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ courseId
 
 export async function POST(req: Request, { params }: { params: Promise<{ courseId: string }> }) {
   try {
-    const { courseId } = await params
-    await requireCourseAccess(courseId)
-    const body = (await req.json().catch(() => ({}))) as { rows?: IncomingRow[] }
+    const { courseId: rawCourseId } = await params
+    const courseId = requireUuid(rawCourseId)
+    const { email } = await requireCourseAccess(courseId)
+    await enforceRateLimit({
+      scope: 'roster_mutation',
+      keyHash: securityHash('account', email),
+      limit: 20,
+      windowSeconds: 60,
+    })
+    const body = (await readJsonObject(req, 1_500_000)) as { rows?: IncomingRow[] }
     if (!Array.isArray(body.rows) || body.rows.length === 0 || body.rows.length > 5000) {
       throw new HttpError(400, 'invalid_roster')
     }
@@ -50,9 +67,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ courseI
 
 export async function PUT(req: Request, { params }: { params: Promise<{ courseId: string }> }) {
   try {
-    const { courseId } = await params
-    await requireCourseAccess(courseId)
-    const body = (await req.json().catch(() => ({}))) as { email?: unknown }
+    const { courseId: rawCourseId } = await params
+    const courseId = requireUuid(rawCourseId)
+    const { email: actorEmail } = await requireCourseAccess(courseId)
+    await enforceRateLimit({
+      scope: 'roster_mutation',
+      keyHash: securityHash('account', actorEmail),
+      limit: 20,
+      windowSeconds: 60,
+    })
+    const body = (await readJsonObject(req, 4096)) as { email?: unknown }
     const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
     if (!email || email.length > 254) throw new HttpError(400, 'invalid_student')
 
@@ -67,9 +91,16 @@ export async function PUT(req: Request, { params }: { params: Promise<{ courseId
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ courseId: string }> }) {
   try {
-    const { courseId } = await params
-    await requireCourseAccess(courseId)
-    const body = (await req.json().catch(() => ({}))) as { studentId?: unknown }
+    const { courseId: rawCourseId } = await params
+    const courseId = requireUuid(rawCourseId)
+    const { email } = await requireCourseAccess(courseId)
+    await enforceRateLimit({
+      scope: 'roster_mutation',
+      keyHash: securityHash('account', email),
+      limit: 20,
+      windowSeconds: 60,
+    })
+    const body = (await readJsonObject(req, 4096)) as { studentId?: unknown }
     const studentId = typeof body.studentId === 'string' ? normalizeStudentId(body.studentId) : ''
     if (!studentId || studentId.length > 80) throw new HttpError(400, 'invalid_student')
 

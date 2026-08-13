@@ -1,6 +1,8 @@
-import * as XLSX from 'xlsx'
+import { readSheet } from 'read-excel-file/browser'
 
 export type RosterRow = { studentId: string; studentName: string }
+
+const MAX_ROSTER_FILE_BYTES = 5 * 1024 * 1024
 
 const idHeaders = new Set([
   'id',
@@ -18,9 +20,19 @@ const nameHeaders = new Set(['name', 'studentname', 'fullname', 'student'])
 
 export async function parseRosterFile(file: File): Promise<RosterRow[]> {
   const extension = file.name.split('.').pop()?.toLowerCase()
+  if (file.size > MAX_ROSTER_FILE_BYTES) {
+    throw new Error('Roster files must be 5 MB or smaller.')
+  }
+  if (extension === 'xls') {
+    throw new Error('Legacy .xls files are not supported. Save the workbook as .xlsx, CSV, or TSV.')
+  }
+  if (extension !== 'xlsx' && extension !== 'csv' && extension !== 'tsv') {
+    throw new Error('Upload an .xlsx, .csv, or .tsv roster file.')
+  }
+
   const rows = extension === 'csv' || extension === 'tsv'
     ? parseDelimited(await file.text(), extension === 'tsv' ? '\t' : ',')
-    : await parseExcel(await file.arrayBuffer())
+    : await parseExcel(file)
 
   return normalizeRoster(rows)
 }
@@ -94,20 +106,11 @@ function parseDelimited(text: string, delimiter: string) {
   return rows
 }
 
-async function parseExcel(buffer: ArrayBuffer) {
+async function parseExcel(file: File) {
   try {
-    const workbook = XLSX.read(buffer, { type: 'array', cellText: true, cellNF: false })
-    const firstSheetName = workbook.SheetNames[0]
-    if (!firstSheetName) throw new Error('Could not find a worksheet in this Excel file.')
-    const sheet = workbook.Sheets[firstSheetName]
-    if (!sheet) throw new Error('Could not find the first worksheet in this Excel file.')
-    return XLSX.utils.sheet_to_json<string[]>(sheet, {
-      header: 1,
-      defval: '',
-      raw: false,
-    }).map((row) => row.map((cell) => String(cell ?? '')))
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('worksheet')) throw error
-    throw new Error('Could not read this Excel file. Make sure it is a valid .xls or .xlsx workbook.')
+    const rows = await readSheet(file)
+    return rows.map((row) => row.map((cell) => String(cell ?? '')))
+  } catch {
+    throw new Error('Could not read this Excel file. Make sure it is a valid .xlsx workbook.')
   }
 }

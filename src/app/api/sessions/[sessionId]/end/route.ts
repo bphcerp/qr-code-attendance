@@ -2,10 +2,14 @@ import { eq, and, isNull } from 'drizzle-orm'
 import { db } from '@/db'
 import { classSessions, displayTokens, auditLog } from '@/db/schema'
 import { errorResponse, requireCourseAccess, HttpError } from '@/lib/guards'
+import { enforceRateLimit } from '@/lib/rateLimit'
+import { securityHash } from '@/lib/security'
+import { requireUuid } from '@/lib/validation'
 
 export async function POST(_req: Request, { params }: { params: Promise<{ sessionId: string }> }) {
   try {
-    const { sessionId } = await params
+    const { sessionId: rawSessionId } = await params
+    const sessionId = requireUuid(rawSessionId)
 
     const [session] = await db
       .select({ courseId: classSessions.courseId, endedAt: classSessions.endedAt })
@@ -14,6 +18,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ sessio
     if (!session) throw new HttpError(404, 'not_found')
 
     const { email } = await requireCourseAccess(session.courseId)
+    await enforceRateLimit({
+      scope: 'session_mutation',
+      keyHash: securityHash('account', email),
+      limit: 20,
+      windowSeconds: 60,
+    })
     if (session.endedAt) return Response.json({ ok: true, endedAt: session.endedAt })
 
     const endedAt = new Date()

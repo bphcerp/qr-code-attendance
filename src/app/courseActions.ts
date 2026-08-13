@@ -6,6 +6,8 @@ import { redirect } from 'next/navigation'
 import { db } from '@/db'
 import { courses } from '@/db/schema'
 import { requireRole } from '@/lib/guards'
+import { enforceRateLimit } from '@/lib/rateLimit'
+import { securityHash } from '@/lib/security'
 
 export type CreateCourseState = {
   error?: string
@@ -25,6 +27,12 @@ export async function createCourse(
   formData: FormData,
 ): Promise<CreateCourseState> {
   const { email } = await requireRole('faculty', 'admin')
+  await enforceRateLimit({
+    scope: 'course_mutation',
+    keyHash: securityHash('account', email),
+    limit: 10,
+    windowSeconds: 60,
+  })
   const code = readText(formData, 'code').toUpperCase()
   const name = readText(formData, 'name')
   const fieldErrors: NonNullable<CreateCourseState['fieldErrors']> = {}

@@ -9,6 +9,7 @@ export class HttpError extends Error {
   constructor(
     public status: number,
     public code: string,
+    public retryAfter?: number,
   ) {
     super(code)
   }
@@ -47,7 +48,13 @@ export async function requireCourseAccess(courseId: string) {
 
 export function errorResponse(err: unknown) {
   if (err instanceof HttpError) {
-    return Response.json({ error: err.code }, { status: err.status })
+    return Response.json(
+      { error: err.code },
+      {
+        status: err.status,
+        headers: err.retryAfter ? { 'Retry-After': String(err.retryAfter) } : undefined,
+      },
+    )
   }
   console.error(err)
   return Response.json({ error: 'internal_error' }, { status: 500 })

@@ -12,6 +12,7 @@ import {
 import { errorResponse, requireRole, HttpError } from '@/lib/guards'
 import { activeDisplayCount } from '@/lib/displayToken'
 import { studentIdFromEmail } from '@/lib/studentId'
+import { requireUuid } from '@/lib/validation'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,7 +23,8 @@ export const dynamic = 'force-dynamic'
  */
 export async function GET(_req: Request, { params }: { params: Promise<{ sessionId: string }> }) {
   try {
-    const { sessionId } = await params
+    const { sessionId: rawSessionId } = await params
+    const sessionId = requireUuid(rawSessionId)
 
     // Authenticate before the lookup, so a signed-out caller can't tell a real
     // session id from a made-up one by the difference between 404 and 403.

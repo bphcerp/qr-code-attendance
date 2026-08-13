@@ -13,10 +13,14 @@ const allowedDomains = (process.env.ALLOWED_EMAIL_DOMAINS ?? '')
 // personal account can be used for testing without adding gmail.com to the
 // list above, which would open sign-in to every Google account alive. Leave it
 // empty in a real deployment -- every address here is a permanent hole.
-const allowedEmails = (process.env.ALLOWED_TEST_EMAILS ?? '')
+const configuredTestEmails = (process.env.ALLOWED_TEST_EMAILS ?? '')
   .split(',')
   .map((e) => e.trim().toLowerCase())
   .filter(Boolean)
+
+// Test exceptions are deliberately ignored in production even if a stale
+// deployment variable survives the rollout. Production access is domain-only.
+const allowedEmails = process.env.NODE_ENV === 'production' ? [] : configuredTestEmails
 
 export function isAllowedEmail(email: string | null | undefined) {
   if (!email) return false

@@ -4,12 +4,14 @@ import { db } from '@/db'
 import { enrollments, attendanceRecords, attendanceFlags, courseRoster } from '@/db/schema'
 import { errorResponse, requireUser, HttpError } from '@/lib/guards'
 import { isUniqueViolation } from '@/db/errors'
-import { clientIp, userAgent } from '@/lib/request'
 import { loadOpenSession } from '@/lib/displayToken'
 import { verifyToken } from '@/lib/token'
 import { checkDevice, serializeDeviceCookie, DEVICE_COOKIE } from '@/lib/device'
 import { haversineMetres, OUTLIER_METRES, IMPRECISE_ACCURACY_METRES } from '@/lib/geo'
 import { normalizeStudentId, studentIdFromEmail } from '@/lib/studentId'
+import { securityHash } from '@/lib/security'
+import { enforceRateLimit } from '@/lib/rateLimit'
+import { optionalFiniteNumber, readJsonObject, requireUuid } from '@/lib/validation'
 
 type Body = {
   sessionId?: string
@@ -24,14 +26,33 @@ type Body = {
 export async function POST(req: Request) {
   try {
     const email = await requireUser()
-    const body = (await req.json().catch(() => ({}))) as Body
+    const body = (await readJsonObject(req, 4096)) as Body
 
-    if (!body.sessionId || !body.token || !body.fingerprint) {
+    if (
+      typeof body.sessionId !== 'string' ||
+      typeof body.token !== 'string' ||
+      typeof body.fingerprint !== 'string' ||
+      !/^[0-9a-f]{32}$/i.test(body.fingerprint) ||
+      !/^[0-9A-Z]{6}$|^[0-9A-Z]{10}$/i.test(body.token.trim()) ||
+      (body.geoDenied != null && typeof body.geoDenied !== 'boolean')
+    ) {
       throw new HttpError(400, 'bad_request')
     }
+    const sessionId = requireUuid(body.sessionId)
+    const lat = optionalFiniteNumber(body.lat, -90, 90)
+    const lng = optionalFiniteNumber(body.lng, -180, 180)
+    const accuracy = optionalFiniteNumber(body.accuracy, 0, 100_000)
+    if ((lat == null) !== (lng == null)) throw new HttpError(400, 'bad_request')
+
+    await enforceRateLimit({
+      scope: 'attendance_mark',
+      keyHash: securityHash('account', email),
+      limit: 12,
+      windowSeconds: 60,
+    })
 
     // 1 + 2. session has to be open before its secret means anything
-    const session = await loadOpenSession(body.sessionId)
+    const session = await loadOpenSession(sessionId)
 
     const verified = verifyToken(
       body.token,
@@ -71,11 +92,9 @@ export async function POST(req: Request) {
 
     // 4. device binding, before the insert so a rejected device leaves no trace
     const jar = await cookies()
-    const ua = userAgent(req)
-    const device = await checkDevice(email, jar.get(DEVICE_COOKIE)?.value, body.fingerprint, ua)
+    const fingerprintHash = securityHash('device-fingerprint', body.fingerprint.toLowerCase())
+    const device = await checkDevice(email, jar.get(DEVICE_COOKIE)?.value, fingerprintHash)
     if (!device.ok) throw new HttpError(403, 'device_mismatch')
-
-    const ip = clientIp(req)
 
     // 5. one mark per student per session -- the unique index is the authority
     // here rather than a preceding select, which would race under 600
@@ -89,12 +108,7 @@ export async function POST(req: Request) {
           studentEmail: email,
           source: verified.kind,
           deviceId: device.deviceId,
-          fingerprint: body.fingerprint,
-          ip,
-          userAgent: ua,
-          lat: body.lat ?? null,
-          lng: body.lng ?? null,
-          accuracy: body.accuracy ?? null,
+          fingerprintHash,
         })
         .returning({ id: attendanceRecords.id })
       recordId = row.id
@@ -111,12 +125,12 @@ export async function POST(req: Request) {
 
     if (body.geoDenied) {
       flags.push({ kind: 'geo_denied' })
-    } else if (body.lat != null && body.lng != null) {
-      if (body.accuracy != null && body.accuracy > IMPRECISE_ACCURACY_METRES) {
-        flags.push({ kind: 'geo_imprecise', detail: { accuracy: body.accuracy } })
+    } else if (lat != null && lng != null) {
+      if (accuracy != null && accuracy > IMPRECISE_ACCURACY_METRES) {
+        flags.push({ kind: 'geo_imprecise', detail: { accuracy } })
       }
       if (session.roomLat != null && session.roomLng != null) {
-        const metres = haversineMetres(body.lat, body.lng, session.roomLat, session.roomLng)
+        const metres = haversineMetres(lat, lng, session.roomLat, session.roomLng)
         if (metres > OUTLIER_METRES) {
           flags.push({ kind: 'geo_outlier', detail: { metres: Math.round(metres) } })
         }
@@ -145,7 +159,7 @@ export async function POST(req: Request) {
       .where(
         and(
           eq(attendanceRecords.sessionId, session.id),
-          eq(attendanceRecords.fingerprint, body.fingerprint),
+          eq(attendanceRecords.fingerprintHash, fingerprintHash),
           ne(attendanceRecords.studentEmail, email),
         ),
       )

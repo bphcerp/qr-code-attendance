@@ -5,6 +5,7 @@ import { newSessionSecret, deriveQrToken, deriveCode, verifyToken, currentCounte
 import { checkDevice, serializeDeviceCookie } from '../src/lib/device'
 import { haversineMetres, OUTLIER_METRES } from '../src/lib/geo'
 import { isUniqueViolation } from '../src/db/errors'
+import { securityHash } from '../src/lib/security'
 
 let pass = 0
 let fail = 0
@@ -58,21 +59,22 @@ async function main() {
   check('unenrolled student is absent from roster', !enrolledRows.some((r) => r.email === CAROL))
 
   console.log('\nDevice binding')
-  const first = await checkDevice(ALICE, undefined, 'fp-alice-phone', 'UA/1')
+  const fingerprintHash = securityHash('device-fingerprint', 'fp-alice-phone')
+  const first = await checkDevice(ALICE, undefined, fingerprintHash)
   check('first mark registers a device', first.ok && first.justRegistered)
   const aliceCookie = first.ok ? serializeDeviceCookie(first.deviceId) : ''
 
-  const second = await checkDevice(ALICE, aliceCookie, 'fp-alice-phone', 'UA/1')
+  const second = await checkDevice(ALICE, aliceCookie, fingerprintHash)
   check('same device passes on the next mark', second.ok && !second.justRegistered)
 
-  const noCookie = await checkDevice(ALICE, undefined, 'fp-alice-phone', 'UA/1')
+  const noCookie = await checkDevice(ALICE, undefined, fingerprintHash)
   check('registered student with no cookie is blocked', !noCookie.ok)
 
-  const bobOnAlicesPhone = await checkDevice(BOB, aliceCookie, 'fp-alice-phone', 'UA/1')
+  const bobOnAlicesPhone = await checkDevice(BOB, aliceCookie, fingerprintHash)
   check("another student cannot reuse Alice's device cookie", !bobOnAlicesPhone.ok)
 
   const tampered = aliceCookie.slice(0, -3) + 'aaa'
-  check('a tampered cookie signature is rejected', !(await checkDevice(ALICE, tampered, 'fp', 'UA/1')).ok)
+  check('a tampered cookie signature is rejected', !(await checkDevice(ALICE, tampered, fingerprintHash)).ok)
 
   const [aliceDevices] = await db.select().from(devices).where(eq(devices.userEmail, ALICE))
   check('exactly one active device row for Alice', Boolean(aliceDevices))
@@ -86,7 +88,7 @@ async function main() {
     sessionId: session.id,
     studentEmail: ALICE,
     source: 'qr',
-    fingerprint: 'fp-alice-phone',
+    fingerprintHash,
   })
 
   let duplicateBlocked = false
@@ -95,7 +97,7 @@ async function main() {
       sessionId: session.id,
       studentEmail: ALICE,
       source: 'qr',
-      fingerprint: 'fp-alice-phone',
+      fingerprintHash,
     })
   } catch (err) {
     duplicateBlocked = isUniqueViolation(err, 'attendance_one_per_student_per_session')
