@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LibraryBig, LogOut, QrCode } from 'lucide-react'
+import { LibraryBig, LogOut, QrCode, Users } from 'lucide-react'
 import { signOutAndReturnToLogin } from '@/app/actions'
 import ThemeMenu from './ThemeMenu'
 import { Button } from '@/components/ui/button'
@@ -10,10 +10,12 @@ import { Button } from '@/components/ui/button'
 export default function AppShell({
   name,
   enrolled,
+  isAdmin,
   children,
 }: {
   name: string
   enrolled: boolean
+  isAdmin: boolean
   children: React.ReactNode
 }) {
   const pathname = usePathname()
@@ -22,6 +24,7 @@ export default function AppShell({
   // rare but real, and role alone would hide the only screen they need.
   const nav = [{ href: '/', label: 'Courses', icon: LibraryBig }]
   if (enrolled) nav.push({ href: '/scan', label: 'Scan', icon: QrCode })
+  if (isAdmin) nav.push({ href: '/admin/faculty', label: 'Faculty', icon: Users })
 
   return (
     <>
