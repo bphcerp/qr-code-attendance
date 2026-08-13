@@ -24,7 +24,7 @@ export default async function HomePage() {
   return me.role === 'student' ? (
     <StudentHome email={email} />
   ) : (
-    <FacultyHome email={email} name={me.name} />
+    <FacultyHome email={email} />
   )
 }
 
@@ -48,9 +48,7 @@ async function StudentHome({ email }: { email: string }) {
         <div className="my-8">
           <h1 className="page-title">Your courses</h1>
         </div>
-        <EmptyState icon={BookOpen} title="No courses yet">
-          You aren&rsquo;t enrolled in anything yet. Your instructor imports the roster.
-        </EmptyState>
+        <EmptyState icon={BookOpen} title="No courses yet" />
       </>
     )
   }
@@ -165,7 +163,7 @@ async function StudentHome({ email }: { email: string }) {
   )
 }
 
-async function FacultyHome({ email, name }: { email: string; name: string }) {
+async function FacultyHome({ email }: { email: string }) {
   const mine = await db
     .select({ id: courses.id, code: courses.code, title: courses.title })
     .from(courseFaculty)
@@ -176,13 +174,11 @@ async function FacultyHome({ email, name }: { email: string; name: string }) {
   if (!mine.length) {
     return (
       <>
-        <div className="my-8">
+        <div className="my-8 flex flex-wrap items-center justify-between gap-3">
           <h1 className="page-title">Your courses</h1>
+          <AddCourseForm />
         </div>
-        <AddCourseForm professorName={name} />
-        <EmptyState icon={ClipboardList} title="No assigned courses">
-          Add your first course above to start taking attendance.
-        </EmptyState>
+        <EmptyState icon={ClipboardList} title="No assigned courses" />
       </>
     )
   }
@@ -212,11 +208,10 @@ async function FacultyHome({ email, name }: { email: string; name: string }) {
 
   return (
     <>
-      <div className="my-8">
+      <div className="my-8 flex flex-wrap items-center justify-between gap-3">
         <h1 className="page-title">Your courses</h1>
+        <AddCourseForm />
       </div>
-
-      <AddCourseForm professorName={name} />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {mine.map((course) => (
@@ -229,7 +224,6 @@ async function FacultyHome({ email, name }: { email: string; name: string }) {
               <div>
                 <p className="font-mono text-sm font-medium text-card-foreground">{course.code}</p>
                 <p className="mt-0.5 text-sm text-muted-foreground">{course.title}</p>
-                <p className="meta mt-2">Professor {name}</p>
               </div>
               {liveByCourse.has(course.id) && <StatusChip tone="live">Live</StatusChip>}
             </div>

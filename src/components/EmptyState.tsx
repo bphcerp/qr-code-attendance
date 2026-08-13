@@ -7,7 +7,7 @@ export default function EmptyState({
 }: {
   icon: LucideIcon
   title: string
-  children: React.ReactNode
+  children?: React.ReactNode
 }) {
   return (
     <div className="max-w-xl rounded-lg border border-dashed border-border bg-card p-5">
@@ -17,7 +17,7 @@ export default function EmptyState({
         </span>
         <div>
           <p className="font-bold text-card-foreground">{title}</p>
-          <p className="mt-1 text-sm text-muted-foreground">{children}</p>
+          {children && <p className="mt-1 text-sm text-muted-foreground">{children}</p>}
         </div>
       </div>
     </div>

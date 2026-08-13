@@ -4,6 +4,7 @@ import { db } from '../src/db'
 import {
   users,
   courses,
+  courseFaculty,
   enrollments,
   classSessions,
   attendanceFlags,
@@ -54,6 +55,14 @@ function get(path: string, cookie?: string) {
   })
 }
 
+async function isNotFound(path: string, cookie: string) {
+  const response = await get(path, cookie)
+  if (response.status === 404) return true
+  // Next.js streams this route through loading.tsx. Once the 200 headers are
+  // sent, notFound() is represented by a noindex marker in the HTML instead.
+  return response.status === 200 && (await response.text()).includes('name="robots" content="noindex"')
+}
+
 const stamp = Date.now()
 const PROF = `prof.${stamp}@hyderabad.bits-pilani.ac.in`
 const OTHER_PROF = `other.${stamp}@hyderabad.bits-pilani.ac.in`
@@ -72,6 +81,10 @@ async function main() {
     .insert(courses)
     .values({ code: `CS F${stamp % 1000}`, title: 'Data Structures', facultyEmail: PROF })
     .returning({ id: courses.id })
+
+  await db
+    .insert(courseFaculty)
+    .values({ courseId: course.id, facultyEmail: PROF, addedByEmail: PROF })
 
   await db.insert(enrollments).values([
     { courseId: course.id, studentEmail: STUDENT },
@@ -107,7 +120,7 @@ async function main() {
   const facultyHtml = await (await get('/', profCookie)).text()
   check(
     'faculty home lists their course',
-    facultyHtml.includes(`CS F${stamp % 1000}`) && facultyHtml.includes('students enrolled'),
+    facultyHtml.includes(`CS F${stamp % 1000}`) && facultyHtml.includes('students in roster'),
   )
   check('faculty home links to the session control page', facultyHtml.includes(`/courses/${course.id}/session`))
 
@@ -118,11 +131,11 @@ async function main() {
   )
   check(
     "another faculty gets 404 on someone else's course",
-    (await get(`/courses/${course.id}/session`, otherCookie)).status === 404,
+    await isNotFound(`/courses/${course.id}/session`, otherCookie),
   )
   check(
     'a student gets 404 on the session page',
-    (await get(`/courses/${course.id}/session`, studentCookie)).status === 404,
+    await isNotFound(`/courses/${course.id}/session`, studentCookie),
   )
 
   console.log('\nStarting a session over HTTP')

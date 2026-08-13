@@ -50,6 +50,13 @@
       "when": 1786632498000,
       "tag": "0006_course_faculty",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786645848812,
+      "tag": "0007_course_faculty_invites",
+      "breakpoints": true
     }
   ]
 }

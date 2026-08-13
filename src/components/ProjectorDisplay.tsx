@@ -32,6 +32,7 @@ export default function ProjectorDisplay({
   sessionId,
   displayToken,
   variant = 'fullscreen',
+  onToken,
 }: {
   sessionId: string
   displayToken: string | null
@@ -40,6 +41,7 @@ export default function ProjectorDisplay({
   // them in, so the code is the whole screen and the QR is a courtesy for
   // whoever is standing close enough to use it.
   variant?: 'fullscreen' | 'embedded' | 'code'
+  onToken?: (token: string) => void
 }) {
   const [payload, setPayload] = useState<Payload | null>(null)
   const [svg, setSvg] = useState<string>('')
@@ -112,6 +114,7 @@ export default function ProjectorDisplay({
 
   useEffect(() => {
     if (!payload) return
+    onToken?.(payload.token)
     // Level L keeps the module count down, which is the whole game at this
     // distance -- bigger squares beat redundancy the QR spec adds for damaged
     // prints, and a projected code is not a damaged print.
@@ -121,7 +124,7 @@ export default function ProjectorDisplay({
       margin: 2,
       color: { dark: '#000000', light: '#ffffff' },
     }).then(setSvg)
-  }, [payload])
+  }, [payload, onToken])
 
   if (error) {
     return (

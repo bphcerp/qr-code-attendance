@@ -108,6 +108,27 @@ export const facultyInvites = pgTable('faculty_invites', {
   claimedAt: timestamp('claimed_at', { withTimezone: true }),
 })
 
+// A course owner may pre-authorise an instructor who has not signed in yet.
+// The address receives both the faculty role and this course membership only
+// after Google authenticates it; no privileged users row exists before then.
+export const courseFacultyInvites = pgTable(
+  'course_faculty_invites',
+  {
+    courseId: uuid('course_id')
+      .notNull()
+      .references(() => courses.id, { onDelete: 'cascade' }),
+    email: varchar('email').notNull(),
+    invitedByEmail: varchar('invited_by_email')
+      .notNull()
+      .references(() => users.email),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.courseId, table.email] }),
+    index('course_faculty_invites_email_idx').on(table.email),
+  ],
+)
+
 export const enrollments = pgTable(
   'enrollments',
   {

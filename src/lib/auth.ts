@@ -2,7 +2,7 @@ import NextAuth from 'next-auth'
 import Google from 'next-auth/providers/google'
 import { and, eq, isNull } from 'drizzle-orm'
 import { db } from '@/db'
-import { auditLog, facultyInvites, users } from '@/db/schema'
+import { auditLog, courseFaculty, courseFacultyInvites, facultyInvites, users } from '@/db/schema'
 
 const allowedDomains = (process.env.ALLOWED_EMAIL_DOMAINS ?? '')
   .split(',')
@@ -65,6 +65,50 @@ export async function claimFacultyInvite(email: string) {
   }
 }
 
+/**
+ * Claims every course membership pre-authorised for this address. The invite
+ * deletion is the concurrency gate: only the transaction that deletes a row
+ * may create its membership and audit entry.
+ */
+export async function claimCourseFacultyInvites(email: string) {
+  await db.transaction(async (tx) => {
+    const invites = await tx
+      .select({
+        courseId: courseFacultyInvites.courseId,
+        invitedByEmail: courseFacultyInvites.invitedByEmail,
+      })
+      .from(courseFacultyInvites)
+      .where(eq(courseFacultyInvites.email, email))
+
+    for (const invite of invites) {
+      const [claimed] = await tx
+        .delete(courseFacultyInvites)
+        .where(and(
+          eq(courseFacultyInvites.courseId, invite.courseId),
+          eq(courseFacultyInvites.email, email),
+        ))
+        .returning({ courseId: courseFacultyInvites.courseId })
+      if (!claimed) continue
+
+      await tx
+        .insert(courseFaculty)
+        .values({
+          courseId: invite.courseId,
+          facultyEmail: email,
+          addedByEmail: invite.invitedByEmail,
+        })
+        .onConflictDoNothing()
+
+      await tx.insert(auditLog).values({
+        actorEmail: invite.invitedByEmail,
+        action: 'course_faculty_invite.claim',
+        subject: email,
+        detail: { courseId: invite.courseId },
+      })
+    }
+  })
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     Google({
@@ -99,6 +143,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         .onConflictDoNothing()
 
       await claimFacultyInvite(email!)
+      await claimCourseFacultyInvites(email!)
 
       return true
     },

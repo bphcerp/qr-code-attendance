@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { MapPin, QrCode, RefreshCw, Search } from 'lucide-react'
+import { Download, MapPin, QrCode, RefreshCw, Search } from 'lucide-react'
+import QRCode from 'qrcode'
 import ProjectorDisplay from './ProjectorDisplay'
 import StatusChip from './StatusChip'
 import { Button } from '@/components/ui/button'
@@ -104,6 +105,7 @@ export default function SessionControl({
   const [presentation, setPresentation] = useState<Presentation>('qr')
   const [room, setRoom] = useState<{ lat: number; lng: number } | null>(null)
   const [displayToken, setDisplayToken] = useState<string | null>(null)
+  const [currentToken, setCurrentToken] = useState<string | null>(null)
   const [stats, setStats] = useState<Stats | null>(null)
   const [studentQuery, setStudentQuery] = useState('')
 
@@ -244,6 +246,7 @@ export default function SessionControl({
   async function revokeDisplays() {
     if (await post(`/api/sessions/${sessionId}/display-token`, 'DELETE', 'revoke')) {
       setDisplayToken(null)
+      setCurrentToken(null)
       if (sessionId) sessionStorage.removeItem(displayStorageKey(sessionId))
       setRevokeOpen(false)
     }
@@ -252,6 +255,7 @@ export default function SessionControl({
   async function endSession() {
     if (await post(`/api/sessions/${sessionId}/end`, 'POST', 'end')) {
       setDisplayToken(null)
+      setCurrentToken(null)
       if (sessionId) sessionStorage.removeItem(displayStorageKey(sessionId))
       setStats(null)
       setEndOpen(false)
@@ -265,6 +269,26 @@ export default function SessionControl({
       () => setError('location_unavailable'),
       { enableHighAccuracy: true, timeout: 8000 },
     )
+  }
+
+  async function downloadQr() {
+    if (!currentToken || !activeSession || presentation === 'code') return
+
+    const dataUrl = await QRCode.toDataURL(currentToken, {
+      errorCorrectionLevel: 'L',
+      margin: 2,
+      width: 1024,
+      color: { dark: '#000000', light: '#ffffff' },
+    })
+    const blob = await fetch(dataUrl).then((response) => response.blob())
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `${courseCode.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '')}-${downloadTimestamp()}.png`
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(url)
   }
 
   return (
@@ -494,6 +518,7 @@ export default function SessionControl({
                     sessionId={activeSession.id}
                     displayToken={displayToken}
                     variant={presentation === 'code' ? 'code' : 'embedded'}
+                    onToken={setCurrentToken}
                   />
                 ) : (
                   <div className="flex min-h-[min(68vh,640px)] flex-col items-center justify-center rounded-lg border border-dashed border-border bg-muted/40 p-6 text-center">
@@ -508,36 +533,55 @@ export default function SessionControl({
                   </div>
                 )}
 
-                <div className="mt-4 flex items-center justify-between gap-3">
-                  <p className="meta">
-                    {stats ? `${stats.activeDisplays} active display${stats.activeDisplays === 1 ? '' : 's'}` : 'Checking display'}
-                  </p>
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="meta">
+                      {stats ? `${stats.activeDisplays} active display${stats.activeDisplays === 1 ? '' : 's'}` : 'Checking display'}
+                    </p>
+                    {displayToken && presentation === 'qr' && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {activeSession.rotationSeconds < 60
+                          ? `This code expires in ${activeSession.rotationSeconds} seconds. The download is a snapshot.`
+                          : 'This code stays valid until the session’s next change. The download is a snapshot.'}
+                      </p>
+                    )}
+                  </div>
                   {displayToken && (
-                    <Dialog open={revokeOpen} onOpenChange={(open) => !busy && setRevokeOpen(open)}>
-                      <DialogTrigger asChild>
-                        <Button variant="outline" size="sm" disabled={busy}>
-                          <RefreshCw /> Reset display
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>Reset the attendance display?</DialogTitle>
-                          <DialogDescription>
-                            The current QR will stop immediately. Select “Show QR here” afterwards to
-                            start a fresh display.
-                          </DialogDescription>
-                        </DialogHeader>
-                        <DialogFooter>
-                          <DialogClose asChild>
-                            <Button variant="outline" disabled={busy}>Cancel</Button>
-                          </DialogClose>
-                          <Button variant="destructive" onClick={revokeDisplays} disabled={busy}>
-                            {busyAction === 'revoke' && <Spinner />}
-                            {busyAction === 'revoke' ? 'Resetting…' : 'Reset display'}
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={!currentToken || presentation === 'code'}
+                        onClick={() => void downloadQr()}
+                      >
+                        <Download /> Download QR
+                      </Button>
+                      <Dialog open={revokeOpen} onOpenChange={(open) => !busy && setRevokeOpen(open)}>
+                        <DialogTrigger asChild>
+                          <Button variant="outline" size="sm" disabled={busy}>
+                            <RefreshCw /> Reset display
                           </Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Reset the attendance display?</DialogTitle>
+                            <DialogDescription>
+                              The current QR will stop immediately. Select “Show QR here” afterwards to
+                              start a fresh display.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <DialogFooter>
+                            <DialogClose asChild>
+                              <Button variant="outline" disabled={busy}>Cancel</Button>
+                            </DialogClose>
+                            <Button variant="destructive" onClick={revokeDisplays} disabled={busy}>
+                              {busyAction === 'revoke' && <Spinner />}
+                              {busyAction === 'revoke' ? 'Resetting…' : 'Reset display'}
+                            </Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
                   )}
                 </div>
               </section>
@@ -738,6 +782,12 @@ function displayStorageKey(sessionId: string) {
 
 function presentationStorageKey(sessionId: string) {
   return `attendance-presentation:${sessionId}`
+}
+
+function downloadTimestamp() {
+  const date = new Date()
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}`
 }
 
 function formatTimestamp(value: string) {

@@ -1,22 +1,8 @@
 import { errorResponse, requireCourseAccess, HttpError } from '@/lib/guards'
 import { normalizeStudentId } from '@/lib/studentId'
-import { searchStudentDirectory } from '@/lib/studentDirectory'
-import { addDirectoryStudent, removeRosterStudent, replaceCourseRoster } from '@/lib/courseRoster'
+import { removeRosterStudent, replaceCourseRoster } from '@/lib/courseRoster'
 
 type IncomingRow = { studentId?: unknown; studentName?: unknown }
-
-export async function GET(req: Request, { params }: { params: Promise<{ courseId: string }> }) {
-  try {
-    const { courseId } = await params
-    await requireCourseAccess(courseId)
-    const query = new URL(req.url).searchParams.get('q') ?? ''
-    const students = await searchStudentDirectory(courseId, query)
-
-    return Response.json({ students })
-  } catch (err) {
-    return errorResponse(err)
-  }
-}
 
 export async function POST(req: Request, { params }: { params: Promise<{ courseId: string }> }) {
   try {
@@ -43,23 +29,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ courseI
     await replaceCourseRoster(courseId, rows)
 
     return Response.json({ ok: true, count: rows.length })
-  } catch (err) {
-    return errorResponse(err)
-  }
-}
-
-export async function PUT(req: Request, { params }: { params: Promise<{ courseId: string }> }) {
-  try {
-    const { courseId } = await params
-    await requireCourseAccess(courseId)
-    const body = (await req.json().catch(() => ({}))) as { email?: unknown }
-    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
-    if (!email || email.length > 254) throw new HttpError(400, 'invalid_student')
-
-    const row = await addDirectoryStudent(courseId, email)
-    if (!row) throw new HttpError(404, 'student_not_found')
-
-    return Response.json({ ok: true, student: row })
   } catch (err) {
     return errorResponse(err)
   }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { createCourse, type CreateCourseState } from '@/app/courseActions'
 import { Button } from '@/components/ui/button'
@@ -10,19 +10,21 @@ const initialState: CreateCourseState = {}
 const inputClassName =
   'mt-2 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-card-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20'
 
-export default function AddCourseForm({ professorName }: { professorName: string }) {
+export default function AddCourseForm() {
+  const [open, setOpen] = useState(false)
   const [state, action, pending] = useActionState(createCourse, initialState)
 
-  return (
-    <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-[var(--shadow)]">
-      <div>
-        <h2>Add a course</h2>
-        <p className="text-sm text-muted-foreground">
-          It will be assigned to {professorName} from this login.
-        </p>
-      </div>
+  if (!open) {
+    return (
+      <Button type="button" onClick={() => setOpen(true)}>
+        <Plus /> New course
+      </Button>
+    )
+  }
 
-      <form action={action} className="mt-5 grid gap-4 sm:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)_auto] sm:items-end">
+  return (
+    <section className="mt-4 w-full basis-full rounded-lg border border-border bg-card p-5 shadow-[var(--shadow)]">
+      <form action={action} className="grid gap-4 sm:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)_auto] sm:items-end">
         <label className="block">
           <span className="text-sm font-medium text-card-foreground">Course code</span>
           <input

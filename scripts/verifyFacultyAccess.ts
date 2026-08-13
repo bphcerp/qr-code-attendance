@@ -1,8 +1,8 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { encode } from 'next-auth/jwt'
 import { db } from '../src/db'
-import { auditLog, courses, facultyInvites, users } from '../src/db/schema'
-import { claimFacultyInvite } from '../src/lib/auth'
+import { auditLog, courseFaculty, courseFacultyInvites, courses, facultyInvites, users } from '../src/db/schema'
+import { claimCourseFacultyInvites, claimFacultyInvite } from '../src/lib/auth'
 
 // Same harness as verifyApp.ts: the Google OAuth client doesn't exist yet, so
 // the session cookie is minted directly and the real routes are driven over
@@ -37,12 +37,20 @@ function get(path: string, cookie?: string) {
   return fetch(`${BASE}${path}`, { redirect: 'manual', headers: cookie ? { cookie } : {} })
 }
 
+async function isNotFound(path: string, cookie: string) {
+  const response = await get(path, cookie)
+  if (response.status === 404) return true
+  return response.status === 200 && (await response.text()).includes('name="robots" content="noindex"')
+}
+
 const stamp = Date.now()
 const ADMIN = `admin.${stamp}@hyderabad.bits-pilani.ac.in`
 const PROF = `prof.${stamp}@hyderabad.bits-pilani.ac.in`
 const STUDENT = `stud.${stamp}@hyderabad.bits-pilani.ac.in`
 const INVITED = `invited.${stamp}@hyderabad.bits-pilani.ac.in`
 const INVITED_ADMIN = `inviteadmin.${stamp}@hyderabad.bits-pilani.ac.in`
+const COURSE_INVITED = `courseinvite.${stamp}@hyderabad.bits-pilani.ac.in`
+const CANCELLED = `cancelled.${stamp}@hyderabad.bits-pilani.ac.in`
 
 async function roleOf(email: string) {
   const [row] = await db.select({ role: users.role }).from(users).where(eq(users.email, email))
@@ -65,10 +73,8 @@ async function main() {
   check('signed out redirects to login', anon.status === 307, `got ${anon.status}`)
   const asAdmin = await get('/admin/faculty', adminCookie)
   check('an admin sees the page', asAdmin.status === 200, `got ${asAdmin.status}`)
-  const asProf = await get('/admin/faculty', profCookie)
-  check('faculty get 404, not 403', asProf.status === 404, `got ${asProf.status}`)
-  const asStudent = await get('/admin/faculty', studentCookie)
-  check('students get 404, not 403', asStudent.status === 404, `got ${asStudent.status}`)
+  check('faculty get the not-found page, not 403', await isNotFound('/admin/faculty', profCookie))
+  check('students get the not-found page, not 403', await isNotFound('/admin/faculty', studentCookie))
 
   console.log('\nThe page lists who has access')
   const body = await asAdmin.text()
@@ -110,6 +116,9 @@ async function main() {
     .insert(courses)
     .values({ code: `CS F${stamp % 1000}`, title: 'Invited Course', facultyEmail: INVITED })
     .returning({ id: courses.id })
+  await db
+    .insert(courseFaculty)
+    .values({ courseId: course.id, facultyEmail: INVITED, addedByEmail: INVITED })
   check('the newly-made professor can own a course', Boolean(course?.id))
 
   const invitedCookie = await cookieFor(INVITED, 'faculty')
@@ -117,13 +126,60 @@ async function main() {
   check('their home page renders', invitedHome.status === 200, `got ${invitedHome.status}`)
   check('it shows the course they own', (await invitedHome.text()).includes('Invited Course'))
 
+  console.log('\nA course owner can invite before first sign-in')
+  await db.transaction(async (tx) => {
+    await tx.insert(courseFacultyInvites).values({
+      courseId: course.id,
+      email: COURSE_INVITED,
+      invitedByEmail: INVITED,
+    })
+    await tx.insert(facultyInvites).values({ email: COURSE_INVITED, invitedByEmail: INVITED })
+  })
+  check('the course invite starts pending', await pendingCourseInvite(course.id, COURSE_INVITED))
+  check('the faculty-role invite starts pending', (await pendingInvite(COURSE_INVITED)) === true)
+
+  await db.insert(users).values({ email: COURSE_INVITED, name: 'Course Invitee' })
+  await claimFacultyInvite(COURSE_INVITED)
+  await claimCourseFacultyInvites(COURSE_INVITED)
+  check('claiming grants the faculty role', (await roleOf(COURSE_INVITED)) === 'faculty')
+  check('claiming adds the course membership', await teachesCourse(course.id, COURSE_INVITED))
+  check('claiming removes the pending course invite', !await pendingCourseInvite(course.id, COURSE_INVITED))
+
+  const courseInviteCookie = await cookieFor(COURSE_INVITED, 'faculty')
+  const courseInviteHome = await get('/', courseInviteCookie)
+  check('the invited course appears on their dashboard', (await courseInviteHome.text()).includes('Invited Course'))
+
+  const [claimAudit] = await db
+    .select({ actor: auditLog.actorEmail })
+    .from(auditLog)
+    .where(and(
+      eq(auditLog.subject, COURSE_INVITED),
+      eq(auditLog.action, 'course_faculty_invite.claim'),
+    ))
+  check('the course claim audit credits the owner', claimAudit?.actor === INVITED)
+
+  console.log('\nA course invite can be cancelled before sign-in')
+  await db.transaction(async (tx) => {
+    await tx.insert(courseFacultyInvites).values({
+      courseId: course.id,
+      email: CANCELLED,
+      invitedByEmail: INVITED,
+    })
+    await tx.insert(facultyInvites).values({ email: CANCELLED, invitedByEmail: INVITED })
+  })
+  await db
+    .delete(courseFacultyInvites)
+    .where(and(eq(courseFacultyInvites.courseId, course.id), eq(courseFacultyInvites.email, CANCELLED)))
+  check('cancelling removes the course invite', !await pendingCourseInvite(course.id, CANCELLED))
+  check('cancelling leaves the faculty-role invite for admins to control', (await pendingInvite(CANCELLED)) === true)
+
   console.log('\nCleanup')
   await db.delete(courses).where(eq(courses.id, course.id))
-  await db.delete(auditLog).where(eq(auditLog.actorEmail, ADMIN))
-  for (const email of [INVITED, INVITED_ADMIN]) {
+  await db.delete(auditLog).where(inArray(auditLog.actorEmail, [ADMIN, INVITED]))
+  for (const email of [INVITED, INVITED_ADMIN, COURSE_INVITED, CANCELLED]) {
     await db.delete(facultyInvites).where(eq(facultyInvites.email, email))
   }
-  for (const email of [ADMIN, PROF, STUDENT, INVITED, INVITED_ADMIN]) {
+  for (const email of [ADMIN, PROF, STUDENT, INVITED, INVITED_ADMIN, COURSE_INVITED]) {
     await db.delete(users).where(eq(users.email, email))
   }
 
@@ -137,6 +193,22 @@ async function pendingInvite(email: string) {
     .from(facultyInvites)
     .where(eq(facultyInvites.email, email))
   return row ? row.claimedAt === null : null
+}
+
+async function pendingCourseInvite(courseId: string, email: string) {
+  const [row] = await db
+    .select({ email: courseFacultyInvites.email })
+    .from(courseFacultyInvites)
+    .where(and(eq(courseFacultyInvites.courseId, courseId), eq(courseFacultyInvites.email, email)))
+  return Boolean(row)
+}
+
+async function teachesCourse(courseId: string, email: string) {
+  const [row] = await db
+    .select({ email: courseFaculty.facultyEmail })
+    .from(courseFaculty)
+    .where(and(eq(courseFaculty.courseId, courseId), eq(courseFaculty.facultyEmail, email)))
+  return Boolean(row)
 }
 
 main().catch((err) => {
