@@ -71,6 +71,13 @@ const timestampFormatter = new Intl.DateTimeFormat('en-IN', {
 
 type BusyAction = 'start' | 'generate' | 'revoke' | 'end'
 
+type QrMode = 'rotating' | 'static' | 'announced'
+
+// How the live session is shown to the room. Kept in the browser rather than on
+// the session row: it changes nothing the server checks, and a class that moves
+// indoors halfway through should be able to switch without restarting.
+type Presentation = 'qr' | 'code'
+
 export default function SessionControl({
   courseId,
   courseCode,
@@ -87,9 +94,14 @@ export default function SessionControl({
   const [error, setError] = useState<string | null>(null)
   const [revokeOpen, setRevokeOpen] = useState(false)
   const [endOpen, setEndOpen] = useState(false)
-  const [qrMode, setQrMode] = useState<'rotating' | 'static'>('rotating')
+  const [qrMode, setQrMode] = useState<QrMode>('rotating')
   const [rotationSeconds, setRotationSeconds] = useState(5)
   const [staticMinutes, setStaticMinutes] = useState(30)
+  // Two minutes: long enough to say the code, have it repeated at the back and
+  // let people type it, short enough that relaying it to someone off the ground
+  // is a race rather than a formality.
+  const [announcedMinutes, setAnnouncedMinutes] = useState(2)
+  const [presentation, setPresentation] = useState<Presentation>('qr')
   const [room, setRoom] = useState<{ lat: number; lng: number } | null>(null)
   const [displayToken, setDisplayToken] = useState<string | null>(null)
   const [stats, setStats] = useState<Stats | null>(null)
@@ -157,6 +169,8 @@ export default function SessionControl({
     if (!sessionId) return
     const timer = window.setTimeout(() => {
       setDisplayToken(sessionStorage.getItem(displayStorageKey(sessionId)))
+      const stored = sessionStorage.getItem(presentationStorageKey(sessionId))
+      if (stored === 'code' || stored === 'qr') setPresentation(stored)
     }, 0)
     return () => window.clearTimeout(timer)
   }, [sessionId])
@@ -184,24 +198,39 @@ export default function SessionControl({
     }
   }
 
+  function chosenRotationSeconds() {
+    if (qrMode === 'static') return staticMinutes * 60
+    if (qrMode === 'announced') return announcedMinutes * 60
+    return rotationSeconds
+  }
+
   async function start() {
+    const seconds = chosenRotationSeconds()
     const created = await post(`/api/courses/${courseId}/sessions`, 'POST', 'start', {
-      rotationSeconds: qrMode === 'static' ? staticMinutes * 60 : rotationSeconds,
+      rotationSeconds: seconds,
       declaredDisplayCount: 1,
       roomLat: room?.lat ?? null,
       roomLng: room?.lng ?? null,
     })
     if (created) {
+      const shown: Presentation = qrMode === 'announced' ? 'code' : 'qr'
       sessionStorage.setItem(displayStorageKey(created.id), created.displayToken)
+      sessionStorage.setItem(presentationStorageKey(created.id), shown)
       setDisplayToken(created.displayToken)
+      setPresentation(shown)
       setStats(null)
       setActiveSession({
         id: created.id,
         startedAt: created.startedAt,
-        rotationSeconds: qrMode === 'static' ? staticMinutes * 60 : rotationSeconds,
+        rotationSeconds: seconds,
         declaredDisplayCount: 1,
       })
     }
+  }
+
+  function showAs(next: Presentation) {
+    setPresentation(next)
+    if (sessionId) sessionStorage.setItem(presentationStorageKey(sessionId), next)
   }
 
   async function generateDisplay() {
@@ -292,7 +321,7 @@ export default function SessionControl({
           <div className="grid divide-y divide-border lg:grid-cols-[1.15fr_0.85fr] lg:divide-x lg:divide-y-0">
             <fieldset className="min-w-0 p-5 sm:p-6">
               <legend className="text-sm font-semibold text-card-foreground">QR security</legend>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="QR mode">
+              <div className="mt-3 grid gap-3 sm:grid-cols-3" role="radiogroup" aria-label="QR mode">
                 <button
                   type="button"
                   role="radio"
@@ -306,6 +335,20 @@ export default function SessionControl({
                 >
                   <span className="block text-sm font-bold text-card-foreground">Rotating QR</span>
                   <span className="mt-1 block text-sm text-muted-foreground">Changes every few seconds for stronger protection.</span>
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={qrMode === 'announced'}
+                  onClick={() => setQrMode('announced')}
+                  className={`rounded-lg border p-4 text-left transition-[border-color,background-color,box-shadow] ${
+                    qrMode === 'announced'
+                      ? 'border-primary bg-accent shadow-sm'
+                      : 'border-border bg-background hover:border-primary/50'
+                  }`}
+                >
+                  <span className="block text-sm font-bold text-card-foreground">Announced code</span>
+                  <span className="mt-1 block text-sm text-muted-foreground">For the ground, or anywhere with nothing to project onto. Read the code out.</span>
                 </button>
                 <button
                   type="button"
@@ -325,17 +368,30 @@ export default function SessionControl({
 
               <label className="mt-4 block rounded-lg bg-muted/50 p-4">
                 <span className="text-sm font-medium text-card-foreground">
-                  {qrMode === 'rotating' ? 'Rotate every' : 'Keep active for'}
+                  {qrMode === 'rotating'
+                    ? 'Rotate every'
+                    : qrMode === 'announced'
+                      ? 'New code every'
+                      : 'Keep active for'}
                 </span>
                 <div className="mt-2 flex items-center gap-3">
                   <input
                     type="number"
                     min={qrMode === 'rotating' ? 3 : 1}
-                    max={qrMode === 'rotating' ? 30 : STATIC_MINUTES_MAX}
-                    value={qrMode === 'rotating' ? rotationSeconds : staticMinutes}
+                    max={
+                      qrMode === 'rotating' ? 30 : qrMode === 'announced' ? 30 : STATIC_MINUTES_MAX
+                    }
+                    value={
+                      qrMode === 'rotating'
+                        ? rotationSeconds
+                        : qrMode === 'announced'
+                          ? announcedMinutes
+                          : staticMinutes
+                    }
                     onChange={(event) => {
                       const value = Number(event.target.value)
                       if (qrMode === 'rotating') setRotationSeconds(value)
+                      else if (qrMode === 'announced') setAnnouncedMinutes(value)
                       else setStaticMinutes(value)
                     }}
                     className="h-10 w-24 rounded-md border border-input bg-background px-3 font-mono text-card-foreground outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
@@ -347,7 +403,9 @@ export default function SessionControl({
                 <span className={`mt-2 block text-sm ${qrMode === 'static' ? 'text-destructive' : 'text-muted-foreground'}`}>
                   {qrMode === 'rotating'
                     ? 'Five seconds is recommended for most classrooms.'
-                    : `Screenshots remain valid for all ${staticMinutes} minutes.`}
+                    : qrMode === 'announced'
+                      ? 'Long enough to say it and have it repeated at the back. Anyone off the ground has to be told it within the same window.'
+                      : `Screenshots remain valid for all ${staticMinutes} minutes.`}
                 </span>
               </label>
             </fieldset>
@@ -395,20 +453,47 @@ export default function SessionControl({
                 <div className="mb-4 flex items-start justify-between gap-3">
                   <div>
                     <h2 className="text-xl font-extrabold text-card-foreground">
-                      Scan to mark attendance
+                      {presentation === 'code' ? 'Read the code out' : 'Scan to mark attendance'}
                     </h2>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      The QR updates securely on this page—no new tab or link needed.
+                      {presentation === 'code'
+                        ? 'Students type it on their own phones. Nothing needs to be projected.'
+                        : 'The QR updates securely on this page—no new tab or link needed.'}
                     </p>
                   </div>
                   {displayToken && <StatusChip tone="live">On</StatusChip>}
                 </div>
 
+                {displayToken && (
+                  <div
+                    className="mb-4 inline-flex rounded-md border border-border p-0.5"
+                    role="radiogroup"
+                    aria-label="How to show the session"
+                  >
+                    {(['qr', 'code'] as const).map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        role="radio"
+                        aria-checked={presentation === option}
+                        onClick={() => showAs(option)}
+                        className={`rounded px-3 py-1.5 text-sm transition-colors ${
+                          presentation === option
+                            ? 'bg-accent font-semibold text-accent-foreground'
+                            : 'text-muted-foreground hover:text-card-foreground'
+                        }`}
+                      >
+                        {option === 'qr' ? 'Show QR' : 'Big code'}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 {displayToken ? (
                   <ProjectorDisplay
                     sessionId={activeSession.id}
                     displayToken={displayToken}
-                    variant="embedded"
+                    variant={presentation === 'code' ? 'code' : 'embedded'}
                   />
                 ) : (
                   <div className="flex min-h-[min(68vh,640px)] flex-col items-center justify-center rounded-lg border border-dashed border-border bg-muted/40 p-6 text-center">
@@ -649,6 +734,10 @@ function Tile({
 
 function displayStorageKey(sessionId: string) {
   return `attendance-display:${sessionId}`
+}
+
+function presentationStorageKey(sessionId: string) {
+  return `attendance-presentation:${sessionId}`
 }
 
 function formatTimestamp(value: string) {

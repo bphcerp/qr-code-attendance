@@ -11,6 +11,13 @@ type Payload = {
   serverTime: string
 }
 
+// Seconds up to a minute, then m:ss -- an announced-code session runs on a
+// rotation of minutes, and "changes in 143" is not a thing anyone can act on.
+function formatCountdown(seconds: number) {
+  if (seconds < 60) return `${seconds}s`
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+}
+
 const errorLabels: Record<string, string> = {
   display_token_missing: 'This link is missing its display key.',
   display_token_invalid: 'This display link is not valid.',
@@ -28,13 +35,18 @@ export default function ProjectorDisplay({
 }: {
   sessionId: string
   displayToken: string | null
-  variant?: 'fullscreen' | 'embedded'
+  // 'code' is for classes held somewhere with nothing to project onto -- the
+  // ground, mostly. The lecturer reads the six characters out and students type
+  // them in, so the code is the whole screen and the QR is a courtesy for
+  // whoever is standing close enough to use it.
+  variant?: 'fullscreen' | 'embedded' | 'code'
 }) {
   const [payload, setPayload] = useState<Payload | null>(null)
   const [svg, setSvg] = useState<string>('')
   const [error, setError] = useState<string | null>(
     displayToken ? null : 'display_token_missing',
   )
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null)
   // the podium PC's clock is not to be trusted -- every response carries the
   // server's time and this is the difference we correct by
   const clockOffset = useRef(0)
@@ -85,6 +97,19 @@ export default function ProjectorDisplay({
     }
   }, [sessionId, displayToken])
 
+  // Counted down on its own interval rather than off the poll, because reading
+  // a code out to a field of people needs a few seconds' warning before it
+  // changes underneath them -- otherwise half the row types the previous one.
+  useEffect(() => {
+    if (!payload) return
+    const target = Date.parse(payload.nextRotationAt)
+    const update = () =>
+      setSecondsLeft(Math.max(0, Math.round((target - (Date.now() + clockOffset.current)) / 1000)))
+    update()
+    const timer = setInterval(update, 500)
+    return () => clearInterval(timer)
+  }, [payload])
+
   useEffect(() => {
     if (!payload) return
     // Level L keeps the module count down, which is the whole game at this
@@ -102,14 +127,14 @@ export default function ProjectorDisplay({
     return (
       <div
         className={
-          variant === 'embedded'
+          variant !== 'fullscreen'
             ? 'flex min-h-[min(68vh,640px)] flex-col items-center justify-center gap-3 rounded-lg bg-white p-6 text-center'
             : 'flex min-h-screen flex-col items-center justify-center gap-4 bg-white p-8 text-center'
         }
       >
         <p
           className={
-            variant === 'embedded'
+            variant !== 'fullscreen'
               ? 'text-2xl font-extrabold text-black'
               : 'text-5xl font-extrabold text-black'
           }
@@ -118,14 +143,14 @@ export default function ProjectorDisplay({
         </p>
         <p
           className={
-            variant === 'embedded' ? 'text-base text-neutral-600' : 'text-2xl text-neutral-600'
+            variant !== 'fullscreen' ? 'text-base text-neutral-600' : 'text-2xl text-neutral-600'
           }
         >
           {errorLabels[error] ?? 'Something went wrong.'}
         </p>
         <p
           className={
-            variant === 'embedded' ? 'text-sm text-neutral-500' : 'text-xl text-neutral-500'
+            variant !== 'fullscreen' ? 'text-sm text-neutral-500' : 'text-xl text-neutral-500'
           }
         >
           Generate a new display from the course page.
@@ -138,7 +163,7 @@ export default function ProjectorDisplay({
     return (
       <div
         className={
-          variant === 'embedded'
+          variant !== 'fullscreen'
             ? 'flex min-h-[min(68vh,640px)] items-center justify-center rounded-lg bg-white'
             : 'flex min-h-screen items-center justify-center bg-white'
         }
@@ -147,13 +172,50 @@ export default function ProjectorDisplay({
           role="status"
           aria-live="polite"
           className={
-            variant === 'embedded'
+            variant !== 'fullscreen'
               ? 'flex items-center gap-3 text-lg text-neutral-600'
               : 'flex items-center gap-3 text-3xl text-neutral-600'
           }
         >
           <Spinner className="size-8" /> Starting…
         </p>
+      </div>
+    )
+  }
+
+  if (variant === 'code') {
+    return (
+      <div className="flex min-h-[min(68vh,640px)] flex-col items-center justify-center gap-6 rounded-lg bg-white p-4 sm:p-6">
+        <div className="text-center">
+          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-neutral-500">
+            Read this out
+          </p>
+          {/* Wraps on a narrow phone rather than shrinking -- this is meant to be
+              readable at arm's length while the lecturer is talking. */}
+          <p className="mt-3 break-all font-mono text-7xl font-semibold leading-none tracking-[0.1em] text-black sm:text-8xl">
+            {payload.code}
+          </p>
+          <p
+            aria-live="off"
+            className={`mt-4 text-lg tabular-nums ${
+              secondsLeft !== null && secondsLeft <= 10 ? 'text-black' : 'text-neutral-500'
+            }`}
+          >
+            {secondsLeft === null
+              ? ' '
+              : secondsLeft <= 0
+                ? 'changing…'
+                : `changes in ${formatCountdown(secondsLeft)}`}
+          </p>
+        </div>
+
+        <div className="flex flex-col items-center gap-2 border-t border-neutral-200 pt-5">
+          <div
+            className="aspect-square w-40 [&>svg]:h-full [&>svg]:w-full"
+            dangerouslySetInnerHTML={{ __html: svg }}
+          />
+          <p className="text-xs text-neutral-500">or scan, if you are close enough</p>
+        </div>
       </div>
     )
   }
