@@ -1,11 +1,16 @@
 import { eq, and, isNull } from 'drizzle-orm'
 import { db } from '@/db'
 import { classSessions, displayTokens, auditLog } from '@/db/schema'
-import { errorResponse, requireCourseAccess, HttpError } from '@/lib/guards'
+import { errorResponse, requireCourseAccess, requireRole, HttpError } from '@/lib/guards'
 
 export async function POST(_req: Request, { params }: { params: Promise<{ sessionId: string }> }) {
   try {
     const { sessionId } = await params
+
+    // Authenticate before the lookup, so a caller without faculty access can't
+    // tell a real session id from a made-up one by the 403-vs-404 difference.
+    // Matches the ordering the stats route already uses.
+    await requireRole('faculty', 'admin')
 
     const [session] = await db
       .select({ courseId: classSessions.courseId, endedAt: classSessions.endedAt })

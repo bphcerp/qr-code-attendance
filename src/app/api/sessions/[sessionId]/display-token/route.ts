@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { db } from '@/db'
 import { classSessions } from '@/db/schema'
-import { errorResponse, requireCourseAccess, HttpError } from '@/lib/guards'
+import { errorResponse, requireCourseAccess, requireRole, HttpError } from '@/lib/guards'
 import { issueDisplayToken, revokeDisplayTokens } from '@/lib/displayToken'
 
 async function courseIdFor(sessionId: string) {
@@ -16,6 +16,9 @@ async function courseIdFor(sessionId: string) {
 export async function POST(_req: Request, { params }: { params: Promise<{ sessionId: string }> }) {
   try {
     const { sessionId } = await params
+    // Authenticate before the lookup so courseIdFor's 404 can't be used to probe
+    // which session ids exist (see the stats route for the same ordering).
+    await requireRole('faculty', 'admin')
     const { email } = await requireCourseAccess(await courseIdFor(sessionId))
     const { token, expiresAt } = await issueDisplayToken(sessionId, email)
     return Response.json({ token, expiresAt: expiresAt.toISOString() })
@@ -30,6 +33,7 @@ export async function DELETE(
 ) {
   try {
     const { sessionId } = await params
+    await requireRole('faculty', 'admin')
     const { email } = await requireCourseAccess(await courseIdFor(sessionId))
     await revokeDisplayTokens(sessionId, email)
     return Response.json({ ok: true })
