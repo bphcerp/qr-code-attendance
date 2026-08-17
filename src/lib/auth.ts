@@ -27,16 +27,14 @@ export function isAllowedEmail(email: string | null | undefined) {
   return allowedDomains.includes(domain)
 }
 
-/**
- * Turns an admin's pre-authorisation into a real role, once and only once, at
- * the moment the invited address first authenticates. Runs on every sign-in,
- * which is cheap (a primary-key lookup that misses for everyone but the
- * handful of invited addresses) and is nowhere near the per-request path.
- *
- * The promotion is scoped to role='student' so a re-issued invite can never
- * demote an admin, and the invite is marked claimed regardless -- an invite for
- * someone who is already faculty has still been answered.
- */
+// Turns an admin's pre-authorisation into a real role, once and only once, at
+// the moment the invited address first authenticates. Runs on every sign-in,
+// which is cheap (a primary-key lookup that misses for everyone but the
+// handful of invited addresses) and is nowhere near the per-request path.
+//
+// The promotion is scoped to role='student' so a re-issued invite can never
+// demote an admin, and the invite is marked claimed regardless -- an invite for
+// someone who is already faculty has still been answered.
 export async function claimFacultyInvite(email: string) {
   const [invite] = await db
     .select({ invitedByEmail: facultyInvites.invitedByEmail })
@@ -65,11 +63,9 @@ export async function claimFacultyInvite(email: string) {
   }
 }
 
-/**
- * Claims every course membership pre-authorised for this address. The invite
- * deletion is the concurrency gate: only the transaction that deletes a row
- * may create its membership and audit entry.
- */
+// Claims every course membership pre-authorised for this address. The invite
+// deletion is the concurrency gate: only the transaction that deletes a row
+// may create its membership and audit entry.
 export async function claimCourseFacultyInvites(email: string) {
   await db.transaction(async (tx) => {
     const invites = await tx

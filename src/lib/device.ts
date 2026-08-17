@@ -13,7 +13,7 @@ export function serializeDeviceCookie(deviceId: string) {
   return `${deviceId}.${sign(deviceId)}`
 }
 
-export function parseDeviceCookie(raw: string | undefined) {
+function parseDeviceCookie(raw: string | undefined) {
   if (!raw) return null
   const idx = raw.lastIndexOf('.')
   if (idx < 0) return null
@@ -25,7 +25,7 @@ export function parseDeviceCookie(raw: string | undefined) {
   return deviceId
 }
 
-export async function activeDeviceFor(userEmail: string) {
+async function activeDeviceFor(userEmail: string) {
   const [row] = await db
     .select()
     .from(devices)
@@ -33,7 +33,7 @@ export async function activeDeviceFor(userEmail: string) {
   return row ?? null
 }
 
-export async function registerDevice(userEmail: string, fingerprint: string, ua: string | null) {
+async function registerDevice(userEmail: string, fingerprint: string, ua: string | null) {
   const [row] = await db
     .insert(devices)
     .values({ userEmail, fingerprint, userAgent: ua })
@@ -45,14 +45,12 @@ export type DeviceCheck =
   | { ok: true; deviceId: string; justRegistered: boolean; recentlyRebound: boolean }
   | { ok: false }
 
-/**
- * A student's first mark registers whatever device they're holding; every mark
- * after that has to come from the same one. The cookie is the identifier and the
- * fingerprint corroborates it -- neither is a hardware root of trust, and a
- * determined student can copy a cookie. What this reliably stops is the ordinary
- * case, a friend signing into your account on their phone and marking twice,
- * because their phone already carries their own device row.
- */
+// A student's first mark registers whatever device they're holding; every mark
+// after that has to come from the same one. The cookie is the identifier and the
+// fingerprint corroborates it -- neither is a hardware root of trust, and a
+// determined student can copy a cookie. What this reliably stops is the ordinary
+// case, a friend signing into your account on their phone and marking twice,
+// because their phone already carries their own device row.
 export async function checkDevice(
   userEmail: string,
   cookieValue: string | undefined,

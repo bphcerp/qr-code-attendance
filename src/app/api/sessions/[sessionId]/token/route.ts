@@ -11,15 +11,13 @@ import { currentCounter, deriveQrToken, deriveCode, nextRotationAt } from '@/lib
 
 export const dynamic = 'force-dynamic'
 
-/**
- * The projector polls this. Access is by display token only -- including when
- * the lecturer runs the display from their own laptop, which differs from the
- * original plan's two-path design. Making the faculty cookie a second way in
- * meant either leaving those displays uncounted or minting a row for them
- * anyway, so there is one path: the control page issues a token and opens the
- * display with it. Faculty authentication still gates issuing that token, which
- * is where the real check belongs.
- */
+// The projector polls this. Access is by display token only -- including when
+// the lecturer runs the display from their own laptop, rather than a second
+// path through the faculty cookie. That would mean either leaving those
+// displays uncounted or minting a row for them anyway, so there is one path:
+// the control page issues a token and opens the display with it. Faculty
+// authentication still gates issuing that token, which is where the real
+// check belongs.
 export async function GET(req: Request, { params }: { params: Promise<{ sessionId: string }> }) {
   try {
     const { sessionId } = await params

@@ -14,11 +14,9 @@ import { studentIdFromEmail } from '@/lib/studentId'
 
 export const dynamic = 'force-dynamic'
 
-/**
- * What the control page polls while a class is running. Everything here is
- * counted in Postgres rather than held per-instance -- on serverless the
- * request that answers this one shares no memory with the poll before it.
- */
+// What the control page polls while a class is running. Everything here is
+// counted in Postgres rather than held per-instance -- on serverless the
+// request that answers this one shares no memory with the poll before it.
 export async function GET(_req: Request, { params }: { params: Promise<{ sessionId: string }> }) {
   try {
     const { sessionId } = await params

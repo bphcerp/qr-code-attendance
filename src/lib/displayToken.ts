@@ -53,12 +53,10 @@ export async function revokeDisplayTokens(sessionId: string, actorEmail: string)
 
 type DisplayTokenRow = typeof displayTokens.$inferSelect
 
-/**
- * Read-only lookup, split out from validation so the caller can run it
- * concurrently with the session lookup -- this is the poll every open display
- * hits continuously for the whole lecture, so the round trip matters here more
- * than anywhere else in the app.
- */
+// Read-only lookup, split out from validation so the caller can run it
+// concurrently with the session lookup -- this is the poll every open display
+// hits continuously for the whole lecture, so the round trip matters here more
+// than anywhere else in the app.
 export async function fetchDisplayToken(sessionId: string, token: string) {
   const [row] = await db
     .select()
@@ -67,14 +65,12 @@ export async function fetchDisplayToken(sessionId: string, token: string) {
   return row
 }
 
-/**
- * Checks are self-contained to the token row (expiresAt is the token's own TTL
- * from issueDisplayToken, not derived from the session) so this never needs
- * the session row -- callers still resolve session status first, though, so a
- * closed session always short-circuits before a token's validity is ever
- * reported. Don't reorder that: it's what keeps a caller from learning a
- * session is still open by how a bad token fails, or vice versa.
- */
+// Checks are self-contained to the token row (expiresAt is the token's own TTL
+// from issueDisplayToken, not derived from the session) so this never needs
+// the session row -- callers still resolve session status first, though, so a
+// closed session always short-circuits before a token's validity is ever
+// reported. Don't reorder that: it's what keeps a caller from learning a
+// session is still open by how a bad token fails, or vice versa.
 export function assertTokenValid(row: DisplayTokenRow | undefined, ip: string | null) {
   if (!row) throw new HttpError(403, 'display_token_invalid')
   if (row.revokedAt) throw new HttpError(403, 'display_token_revoked')
@@ -85,14 +81,12 @@ export function assertTokenValid(row: DisplayTokenRow | undefined, ip: string | 
   return row
 }
 
-/**
- * The IP pin is set on first redemption rather than at issue time, because the
- * podium PC's address isn't known when the lecturer generates the link on their
- * laptop. That leaves one gap worth being honest about: whoever redeems first
- * wins. If a student somehow redeemed before the projector did, the projector
- * would fail loudly and the lecturer would notice immediately -- which is why
- * this returns a distinct error rather than silently reissuing.
- */
+// The IP pin is set on first redemption rather than at issue time, because the
+// podium PC's address isn't known when the lecturer generates the link on their
+// laptop. That leaves one gap worth being honest about: whoever redeems first
+// wins. If a student somehow redeemed before the projector did, the projector
+// would fail loudly and the lecturer would notice immediately -- which is why
+// this returns a distinct error rather than silently reissuing.
 export async function finalizeRedemption(row: DisplayTokenRow, ip: string | null) {
   await db
     .update(displayTokens)
@@ -141,11 +135,6 @@ export function assertSessionOpen(session: SessionRow | undefined) {
   if (!session) throw new HttpError(404, 'not_found')
   if (session.endedAt) throw new HttpError(409, 'session_closed')
   return session
-}
-
-/** Convenience wrapper for callers (attendance/mark) that only need the session, sequentially. */
-export async function loadOpenSession(sessionId: string) {
-  return assertSessionOpen(await fetchSession(sessionId))
 }
 
 // Counted from lastPingAt rather than from open connections: serverless

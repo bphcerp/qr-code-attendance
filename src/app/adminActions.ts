@@ -17,17 +17,15 @@ function readEmail(formData: FormData, key: string) {
   return typeof value === 'string' ? value.trim().toLowerCase() : ''
 }
 
-/**
- * Grants course-creation rights to an address. Two paths, because most of the
- * addresses an admin types here have never signed in:
- *
- *   - the account exists  -> its role is changed immediately
- *   - it doesn't          -> an invite is recorded and claimed at first sign-in
- *
- * Both end at the same place. The split exists so that no privileged `users`
- * row is ever created for an unauthenticated address (see facultyInvites in
- * db/schema.ts).
- */
+// Grants course-creation rights to an address. Two paths, because most of the
+// addresses an admin types here have never signed in:
+//
+//   - the account exists  -> its role is changed immediately
+//   - it doesn't          -> an invite is recorded and claimed at first sign-in
+//
+// Both end at the same place. The split exists so that no privileged `users`
+// row is ever created for an unauthenticated address (see facultyInvites in
+// db/schema.ts).
 export async function grantFacultyAccess(
   _previousState: FacultyAccessState,
   formData: FormData,
@@ -91,12 +89,10 @@ export async function grantFacultyAccess(
   return { notice: `${email} becomes faculty the first time they sign in.` }
 }
 
-/**
- * Withdraws access, from either side of that split -- a faculty account goes
- * back to being a student, an unclaimed invite is deleted. Courses the account
- * already owns are left alone: deleting them would take their sessions and
- * attendance history with them, so they stay put and stop being reachable.
- */
+// Withdraws access, from either side of that split -- a faculty account goes
+// back to being a student, an unclaimed invite is deleted. Courses the account
+// already owns are left alone: deleting them would take their sessions and
+// attendance history with them, so they stay put and stop being reachable.
 export async function revokeFacultyAccess(
   _previousState: FacultyAccessState,
   formData: FormData,

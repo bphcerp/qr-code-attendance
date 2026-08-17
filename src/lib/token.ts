@@ -36,7 +36,7 @@ function encode(buf: Buffer, length: number) {
   return out
 }
 
-export function normalizeCode(input: string) {
+function normalizeCode(input: string) {
   return input
     .trim()
     .toUpperCase()
@@ -85,12 +85,10 @@ export type VerifyResult =
   | { ok: true; counter: number; kind: 'qr' | 'code' }
   | { ok: false; reason: 'expired' | 'invalid' }
 
-/**
- * The counter is not carried in the payload. Dropping it keeps the QR at ten
- * characters instead of thirteen, and QR module size -- which is what decides
- * whether row 20 can scan it -- is set by payload length. The cost is checking
- * two or three candidate counters instead of one, which is a rounding error.
- */
+// The counter is not carried in the payload. Dropping it keeps the QR at ten
+// characters instead of thirteen, and QR module size -- which is what decides
+// whether row 20 can scan it -- is set by payload length. The cost is checking
+// two or three candidate counters instead of one, which is a rounding error.
 export function verifyToken(
   input: string,
   secret: string,

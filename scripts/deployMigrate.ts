@@ -30,7 +30,7 @@ const forced = process.argv.includes('--force') || process.env.FORCE_MIGRATE ===
 async function main() {
   if (!isProductionDeploy && !forced) {
     console.log(
-      `skip migrations — VERCEL_ENV=${process.env.VERCEL_ENV ?? '(unset)'}, not a production deploy`,
+      `skip migrations -- VERCEL_ENV=${process.env.VERCEL_ENV ?? '(unset)'}, not a production deploy`,
     )
     return
   }
@@ -87,7 +87,7 @@ async function main() {
     `
     if (!canCreate) {
       console.warn(
-        `WARNING: connected as "${who}", which cannot run DDL — no migrations were applied.\n` +
+        `WARNING: connected as "${who}", which cannot run DDL -- no migrations were applied.\n` +
           '  This is the runtime role. Point DIRECT_URL at the postgres role on the\n' +
           '  session pooler (5432) instead, or run npm run db:migrate:prod by hand.',
       )

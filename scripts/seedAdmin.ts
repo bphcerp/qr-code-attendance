@@ -25,11 +25,11 @@ async function main() {
       .where(eq(users.email, email))
 
     if (!existing) {
-      console.log(`skip ${email} — has not signed in yet`)
+      console.log(`skip ${email} -- has not signed in yet`)
       continue
     }
     if (existing.role === 'admin') {
-      console.log(`ok   ${email} — already admin`)
+      console.log(`ok   ${email} -- already admin`)
       continue
     }
 
@@ -40,7 +40,7 @@ async function main() {
       subject: email,
       detail: { from: existing.role, to: 'admin' },
     })
-    console.log(`done ${email} — ${existing.role} → admin`)
+    console.log(`done ${email} -- ${existing.role} -> admin`)
   }
 }
 

@@ -5,7 +5,7 @@ import { enrollments, attendanceRecords, attendanceFlags, courseRoster } from '@
 import { errorResponse, requireUser, HttpError } from '@/lib/guards'
 import { isUniqueViolation } from '@/db/errors'
 import { clientIp, userAgent } from '@/lib/request'
-import { loadOpenSession } from '@/lib/displayToken'
+import { fetchSession, assertSessionOpen } from '@/lib/displayToken'
 import { verifyToken } from '@/lib/token'
 import { checkDevice, serializeDeviceCookie, DEVICE_COOKIE } from '@/lib/device'
 import { haversineMetres, OUTLIER_METRES, IMPRECISE_ACCURACY_METRES } from '@/lib/geo'
@@ -30,8 +30,7 @@ export async function POST(req: Request) {
       throw new HttpError(400, 'bad_request')
     }
 
-    // 1 + 2. session has to be open before its secret means anything
-    const session = await loadOpenSession(body.sessionId)
+    const session = assertSessionOpen(await fetchSession(body.sessionId))
 
     const verified = verifyToken(
       body.token,
@@ -44,7 +43,6 @@ export async function POST(req: Request) {
       throw new HttpError(400, verified.reason === 'expired' ? 'token_expired' : 'invalid_token')
     }
 
-    // 3. enrolment
     const [enrolled] = await db
       .select({ courseId: enrollments.courseId })
       .from(enrollments)
@@ -69,7 +67,7 @@ export async function POST(req: Request) {
         .onConflictDoNothing()
     }
 
-    // 4. device binding, before the insert so a rejected device leaves no trace
+    // device binding happens before the insert so a rejected device leaves no trace
     const jar = await cookies()
     const ua = userAgent(req)
     const device = await checkDevice(email, jar.get(DEVICE_COOKIE)?.value, body.fingerprint, ua)
@@ -77,7 +75,7 @@ export async function POST(req: Request) {
 
     const ip = clientIp(req)
 
-    // 5. one mark per student per session -- the unique index is the authority
+    // one mark per student per session -- the unique index is the authority
     // here rather than a preceding select, which would race under 600
     // simultaneous scans
     let recordId: string

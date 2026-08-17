@@ -78,11 +78,9 @@ export type CourseFacultyState = {
   notice?: string
 }
 
-/**
- * Adding and removing co-instructors is the owner's call, not any
- * co-instructor's -- otherwise the first person added can remove the person who
- * added them. Admins can do it too, since they can already reach every course.
- */
+// Adding and removing co-instructors is the owner's call, not any
+// co-instructor's -- otherwise the first person added can remove the person who
+// added them. Admins can do it too, since they can already reach every course.
 async function requireCourseOwner(courseId: string) {
   const { email, role } = await requireRole('faculty', 'admin')
   const [course] = await db

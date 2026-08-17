@@ -49,7 +49,7 @@ export async function requireCourseAccess(courseId: string) {
   return { email, role }
 }
 
-/** Co-teaching membership, separate from ownership. Owners are also rows here. */
+// Co-teaching membership, separate from ownership. Owners are also rows here.
 export async function teachesCourse(courseId: string, email: string) {
   const [row] = await db
     .select({ courseId: courseFaculty.courseId })
