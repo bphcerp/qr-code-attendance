@@ -22,7 +22,9 @@ doesn't gets reverted or rebased out before merging.
 
 Describe the change accurately and, if it fixes a specific incident or bug,
 say what broke and why. Test against the `prod` migration path
-(`npm run db:migrate:prod --force` against a scratch database, not
-production) before merging anything that touches `src/db/schema.ts` -- see
+(`npm run db:migrate:prod` against a scratch database, not production --
+the script already passes `--force`, and appending it after the script name
+hands it to npm instead) before merging anything that touches
+`src/db/schema.ts` -- see
 [docs/design-notes.md](docs/design-notes.md) for why that step has bitten us
 three times already.
