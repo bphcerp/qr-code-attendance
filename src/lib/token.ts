@@ -1,4 +1,9 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto'
+import { CODE_LENGTH } from './tokenFormat'
+
+// Server-only: the crypto import above follows anything that touches this file
+// into the bundle. Client components import '@/lib/tokenFormat' instead.
+export { CODE_LENGTH, STATIC_MINUTES_MAX, isValidRotationSeconds } from './tokenFormat'
 
 // Crockford base32: no I, L, O or U. The first three because they're misread as
 // 1, 1 and 0 from the back of a lecture theatre, and U so a random code can't
@@ -6,7 +11,6 @@ import { createHmac, randomBytes, timingSafeEqual } from 'crypto'
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
 
 const QR_TOKEN_LENGTH = 10
-export const CODE_LENGTH = 6
 
 // How many rotations back a token still counts. QR gets one tick of slack
 // because a camera takes a moment to focus; the typed code gets two because
@@ -18,15 +22,6 @@ const CODE_MAX_AGE_TICKS = 2
 // than invalid, so a student who scanned a second too late is told to try again
 // instead of being told their code was wrong.
 const STALE_DIAGNOSTIC_TICKS = 12
-
-// A "static" QR is the same rotation mechanism with a much longer window --
-// faculty pick how long a screenshot of it stays valid, capped so it can't
-// outlive a single lab block by much.
-export const STATIC_MINUTES_MAX = 240
-
-export function isValidRotationSeconds(seconds: number) {
-  return (seconds >= 3 && seconds <= 30) || (seconds >= 60 && seconds <= STATIC_MINUTES_MAX * 60)
-}
 
 function encode(buf: Buffer, length: number) {
   let out = ''

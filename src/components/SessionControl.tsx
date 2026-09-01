@@ -17,7 +17,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { STATIC_MINUTES_MAX } from '@/lib/token'
+import { STATIC_MINUTES_MAX } from '@/lib/tokenFormat'
 
 type OpenSession = {
   id: string

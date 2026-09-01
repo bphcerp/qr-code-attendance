@@ -12,7 +12,7 @@ import { BrowserQRCodeReader, type IScannerControls } from '@zxing/browser'
 import { deviceFingerprint } from '@/lib/fingerprint'
 import { Button } from '@/components/ui/button'
 import Spinner from '@/components/ui/spinner'
-import { CODE_LENGTH } from '@/lib/token'
+import { CODE_LENGTH } from '@/lib/tokenFormat'
 
 type Phase = 'scanning' | 'sending' | 'done' | 'failed'
 

@@ -6,10 +6,10 @@ import { Button } from '@/components/ui/button'
 
 export default function ErrorPage({
   error,
-  retry,
+  reset,
 }: {
   error: Error & { digest?: string }
-  retry: () => void
+  reset: () => void
 }) {
   useEffect(() => {
     console.error(error)
@@ -23,7 +23,7 @@ export default function ErrorPage({
         Try loading it again. If that does not work, return to your courses.
       </p>
       <div className="mt-6 flex flex-wrap gap-3">
-        <Button onClick={retry}>Try again</Button>
+        <Button onClick={reset}>Try again</Button>
         <Button asChild variant="outline">
           <Link href="/">Back to courses</Link>
         </Button>

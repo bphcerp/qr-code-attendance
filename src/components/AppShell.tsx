@@ -29,11 +29,11 @@ export default function AppShell({
   return (
     <>
       <header className="app-header sticky top-0 z-20 bg-background/80 shadow-sm backdrop-blur-xl">
-        <div className="mx-auto flex min-h-16 w-full max-w-6xl items-center gap-3 px-4 py-2 sm:min-h-20 sm:px-6">
+        <div className="mx-auto flex min-h-16 w-full max-w-6xl min-w-0 items-center gap-1 px-4 py-2 sm:min-h-20 sm:gap-3 sm:px-6">
           <Link
             href="/"
             aria-label="Attendance courses"
-            className="mr-3 rounded-sm font-[family-name:var(--heading)] text-[17px] font-extrabold tracking-[-0.5px] text-card-foreground transition-opacity hover:opacity-75"
+            className="mr-1 shrink-0 rounded-sm font-[family-name:var(--heading)] text-[17px] font-extrabold tracking-[-0.5px] text-card-foreground transition-opacity hover:opacity-75 sm:mr-3"
           >
             Attendance
           </Link>
@@ -44,20 +44,23 @@ export default function AppShell({
               <Link
                 key={item.href}
                 href={item.href}
+                aria-label={item.label}
                 aria-current={active ? 'page' : undefined}
                 className={
                   active
-                    ? 'flex items-center gap-1.5 rounded-md bg-accent px-3.5 py-2 text-sm font-bold text-accent-foreground transition-colors duration-150'
-                    : 'flex items-center gap-1.5 rounded-md px-3.5 py-2 text-sm font-medium transition-colors duration-150 hover:bg-accent'
+                    ? 'flex shrink-0 items-center gap-1.5 rounded-md bg-accent px-2.5 py-2 text-sm font-bold text-accent-foreground transition-colors duration-150 sm:px-3.5'
+                    : 'flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-2 text-sm font-medium transition-colors duration-150 hover:bg-accent sm:px-3.5'
                 }
               >
                 <item.icon size={16} />
-                {item.label}
+                {/* Labels drop below sm so the sign-out and theme controls on the
+                    right can never be pushed off a phone-width header. */}
+                <span className="hidden sm:inline">{item.label}</span>
               </Link>
             )
           })}
 
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
             <span className="hidden text-sm text-muted-foreground sm:inline">{name}</span>
             <ThemeMenu />
             <form action={signOutAndReturnToLogin}>
