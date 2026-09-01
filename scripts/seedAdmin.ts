@@ -4,9 +4,9 @@ import { users, auditLog } from '../src/db/schema'
 
 // Solves the chicken-and-egg: promoting to admin requires an admin, so the
 // first ones come from env instead. Idempotent -- safe to re-run on every
-// deploy. Accounts that have never signed in are skipped rather than created,
-// because a row here with no matching Google account is a role waiting to be
-// claimed by whoever registers that address first.
+// deploy. Accounts that have never signed in are skipped rather than created:
+// this reads INITIAL_ADMIN_EMAILS, so a typo would mint an admin nobody
+// intended, and admin is the one role that can hand out every other one.
 async function main() {
   const emails = (process.env.INITIAL_ADMIN_EMAILS ?? '')
     .split(',')

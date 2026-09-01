@@ -4,7 +4,7 @@ import { and, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { db } from '@/db'
-import { auditLog, courseFaculty, courseFacultyInvites, courses, facultyInvites, users } from '@/db/schema'
+import { auditLog, courseFaculty, courses, users } from '@/db/schema'
 import { isAllowedEmail } from '@/lib/auth'
 import { requireRole } from '@/lib/guards'
 
@@ -111,48 +111,47 @@ export async function addCourseFaculty(
     return { error: 'That does not look like an email address.' }
   }
 
-  // A course owner may pre-authorise an address, but privileges still land only
-  // after Google has authenticated it. Unknown addresses are kept in invite
-  // tables rather than being written as privileged users rows.
+  // The same reasoning as the admin screen: a grant is only safe because it
+  // cannot leave the institute domains.
   if (!isAllowedEmail(email)) {
     return {
       error: 'That address cannot sign in. Only allowed institute domains can be added.',
     }
   }
 
-  const [person] = await db
+  const [existing] = await db
     .select({ email: users.email, name: users.name, role: users.role })
     .from(users)
     .where(eq(users.email, email))
 
+  // An address that has not signed in gets its account here, so the membership
+  // below has a users row to reference. The name is a placeholder until Google
+  // supplies a real one.
+  let person = existing
   if (!person) {
-    const invited = await db.transaction(async (tx) => {
-      const [courseInvite] = await tx
-        .insert(courseFacultyInvites)
-        .values({ courseId, email, invitedByEmail: actor.email })
-        .onConflictDoNothing()
-        .returning({ email: courseFacultyInvites.email })
+    const [created] = await db
+      .insert(users)
+      .values({
+        email,
+        name: email.split('@')[0],
+        role: 'faculty',
+        campus: email.split('@')[1],
+      })
+      .onConflictDoNothing()
+      .returning({ email: users.email, name: users.name, role: users.role })
 
-      await tx
-        .insert(facultyInvites)
-        .values({ email, invitedByEmail: actor.email })
-        .onConflictDoNothing()
+    if (created) {
+      await db.insert(auditLog).values({
+        actorEmail: actor.email,
+        action: 'role.change',
+        subject: email,
+        detail: { to: 'faculty', created: true, via: 'course_faculty' },
+      })
+    }
 
-      if (courseInvite) {
-        await tx.insert(auditLog).values({
-          actorEmail: actor.email,
-          action: 'course_faculty_invite.create',
-          subject: email,
-          detail: { courseId },
-        })
-      }
-      return Boolean(courseInvite)
-    })
-
-    revalidatePath(`/courses/${courseId}/session`)
-    return invited
-      ? { notice: `${email} joins this course the first time they sign in.` }
-      : { notice: `${email} is already waiting to join this course.` }
+    // A no-op insert means the address signed in while this was running, so
+    // the transaction below promotes it like any other existing student.
+    person = created ?? { email, name: email.split('@')[0], role: 'student' }
   }
 
   const added = await db.transaction(async (tx) => {
@@ -220,24 +219,7 @@ export async function removeCourseFaculty(
       .where(and(eq(courseFaculty.courseId, courseId), eq(courseFaculty.facultyEmail, email)))
       .returning({ facultyEmail: courseFaculty.facultyEmail })
 
-    if (!membership) {
-      const [invite] = await tx
-        .delete(courseFacultyInvites)
-        .where(and(
-          eq(courseFacultyInvites.courseId, courseId),
-          eq(courseFacultyInvites.email, email),
-        ))
-        .returning({ email: courseFacultyInvites.email })
-      if (!invite) return null
-
-      await tx.insert(auditLog).values({
-        actorEmail: actor.email,
-        action: 'course_faculty_invite.cancel',
-        subject: email,
-        detail: { courseId },
-      })
-      return 'invite' as const
-    }
+    if (!membership) return false
 
     await tx.insert(auditLog).values({
       actorEmail: actor.email,
@@ -245,14 +227,12 @@ export async function removeCourseFaculty(
       subject: email,
       detail: { courseId },
     })
-    return 'membership' as const
+    return true
   })
 
   if (!removed) return { error: `${email} does not teach this course.` }
 
   revalidatePath(`/courses/${courseId}/session`)
   revalidatePath('/')
-  return removed === 'invite'
-    ? { notice: `Invite for ${email} cancelled.` }
-    : { notice: `${email} no longer teaches this course.` }
+  return { notice: `${email} no longer teaches this course.` }
 }

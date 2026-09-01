@@ -88,15 +88,19 @@ branch.
   shared over Zoom for hybrid sections and glanced at by whoever's standing
   nearby, so the raw URL sitting in plain text was the easiest way for that
   leak to happen by accident.
-- **Faculty access is granted to an address, but lands on an account.**
-  Both an admin on `/admin/faculty` and a course owner adding a
-  co-professor may issue that grant. Writing an unknown address as a
-  privileged `users` row would leave the role waiting for whoever registers
-  it first, so unknown addresses stay in `facultyInvites` and, for a
-  teaching team, `courseFacultyInvites`. The sign-in callback claims them
-  only after Google authenticates the address. A course owner may promote
-  an existing student account immediately because that account has already
-  authenticated; no privileged users row is created before sign-in.
+- **Faculty access takes effect immediately, before the address has ever
+  signed in.** Both an admin on `/admin/faculty` and a course owner adding
+  a co-professor may issue that grant, and either one writes the `users`
+  row itself with `role='faculty'` and the local part of the email standing
+  in as a name until the first sign-in replaces it. This was two-step until
+  Sept 2026 -- unknown addresses waited in `facultyInvites` /
+  `courseFacultyInvites` and the sign-in callback claimed them -- which
+  meant an admin could not finish setting up a course until the professor
+  had logged in once. The cost of dropping it is real and worth naming: a
+  privileged row now exists for an account Google has not authenticated.
+  What makes that tolerable is `isAllowedEmail()`, which every grant path
+  checks first, so the address is always one the institute's Workspace
+  controls rather than one anybody can register.
 - **`isUniqueViolation` in `src/db/errors.ts` exists because Drizzle wraps
   driver errors.** The Postgres code and constraint name are on `.cause`;
   matching the outer message silently never fires.

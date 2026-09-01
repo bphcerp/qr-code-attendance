@@ -20,9 +20,8 @@ export default function GrantFacultyForm() {
       <div>
         <h2>Give a professor access</h2>
         <p className="text-sm text-muted-foreground">
-          They can add their own courses and take attendance. An address that has never signed
-          in is held until it does &mdash; the access lands on the Google account, not on the
-          address.
+          They can add their own courses and take attendance, from the moment you add them here.
+          The address does not have to have signed in yet.
         </p>
       </div>
 

@@ -1,20 +1,14 @@
 import { notFound, redirect } from 'next/navigation'
-import { count, eq, isNull } from 'drizzle-orm'
-import { MailCheck, Users } from 'lucide-react'
+import { count, eq } from 'drizzle-orm'
+import { Users } from 'lucide-react'
 import { db } from '@/db'
-import { courseFaculty, facultyInvites, users } from '@/db/schema'
+import { courseFaculty, users } from '@/db/schema'
 import { auth } from '@/lib/auth'
 import { getCurrentUser } from '@/lib/currentUser'
 import EmptyState from '@/components/EmptyState'
-import StatusChip from '@/components/StatusChip'
 import GrantFacultyForm, { RevokeAccessForm } from '@/components/FacultyAccess'
 
 export const dynamic = 'force-dynamic'
-
-const dateFormatter = new Intl.DateTimeFormat('en-IN', {
-  dateStyle: 'medium',
-  timeZone: 'Asia/Kolkata',
-})
 
 export default async function FacultyAccessPage() {
   const session = await auth()
@@ -27,24 +21,13 @@ export default async function FacultyAccessPage() {
   // a 403 confirms the screen is there to be found.
   if (me?.role !== 'admin') notFound()
 
-  const [faculty, invited] = await Promise.all([
-    db
-      .select({ email: users.email, name: users.name, courses: count(courseFaculty.courseId) })
-      .from(users)
-      .leftJoin(courseFaculty, eq(courseFaculty.facultyEmail, users.email))
-      .where(eq(users.role, 'faculty'))
-      .groupBy(users.email, users.name)
-      .orderBy(users.name),
-    db
-      .select({
-        email: facultyInvites.email,
-        invitedByEmail: facultyInvites.invitedByEmail,
-        createdAt: facultyInvites.createdAt,
-      })
-      .from(facultyInvites)
-      .where(isNull(facultyInvites.claimedAt))
-      .orderBy(facultyInvites.createdAt),
-  ])
+  const faculty = await db
+    .select({ email: users.email, name: users.name, courses: count(courseFaculty.courseId) })
+    .from(users)
+    .leftJoin(courseFaculty, eq(courseFaculty.facultyEmail, users.email))
+    .where(eq(users.role, 'faculty'))
+    .groupBy(users.email, users.name)
+    .orderBy(users.name)
 
   return (
     <div className="py-8">
@@ -57,7 +40,7 @@ export default async function FacultyAccessPage() {
 
       <GrantFacultyForm />
 
-      <section className="mb-6 overflow-hidden rounded-lg border border-border bg-card">
+      <section className="overflow-hidden rounded-lg border border-border bg-card">
         <div className="border-b border-border p-4">
           <h2 className="font-bold text-card-foreground">Professors</h2>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -93,40 +76,6 @@ export default async function FacultyAccessPage() {
           </div>
         )}
       </section>
-
-      {invited.length > 0 && (
-        <section className="overflow-hidden rounded-lg border border-border bg-card">
-          <div className="border-b border-border p-4">
-            <h2 className="font-bold text-card-foreground">Waiting for first sign-in</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Access is granted the moment these addresses sign in with Google.
-            </p>
-          </div>
-
-          <ul className="divide-y divide-border">
-            {invited.map((invite) => (
-              <li
-                key={invite.email}
-                className="flex flex-wrap items-center justify-between gap-3 p-4"
-              >
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <MailCheck aria-hidden="true" className="size-4 text-muted-foreground" />
-                    <p className="font-mono text-sm break-all text-card-foreground">
-                      {invite.email}
-                    </p>
-                    <StatusChip tone="pending">Pending</StatusChip>
-                  </div>
-                  <p className="meta mt-1">
-                    Added {dateFormatter.format(invite.createdAt)} by {invite.invitedByEmail}
-                  </p>
-                </div>
-                <RevokeAccessForm email={invite.email} label="Cancel" />
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
     </div>
   )
 }

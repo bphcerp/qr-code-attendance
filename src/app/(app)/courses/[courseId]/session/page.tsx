@@ -1,7 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { and, count, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 import { db } from '@/db'
-import { attendanceRecords, classSessions, courseFaculty, courseFacultyInvites, courseRoster, courses, enrollments, users } from '@/db/schema'
+import { attendanceRecords, classSessions, courseFaculty, courseRoster, courses, enrollments, users } from '@/db/schema'
 import { auth } from '@/lib/auth'
 import { getCurrentUser } from '@/lib/currentUser'
 import SessionControl from '@/components/SessionControl'
@@ -24,7 +24,7 @@ export default async function SessionPage({
   // course and open-session are independent of each other and of `me` -- the
   // parent layout already fetched `me` for this request, so getCurrentUser()
   // is a cache() hit rather than a fourth round trip.
-  const [me, [course], instructors, pendingInstructors, [open], [rosterCount], [enrollmentCount], rosterRows, sessions] = await Promise.all([
+  const [me, [course], instructors, [open], [rosterCount], [enrollmentCount], rosterRows, sessions] = await Promise.all([
     getCurrentUser(email),
     db
       .select({
@@ -41,11 +41,6 @@ export default async function SessionPage({
       .innerJoin(users, eq(users.email, courseFaculty.facultyEmail))
       .where(eq(courseFaculty.courseId, courseId))
       .orderBy(users.name, users.email),
-    db
-      .select({ email: courseFacultyInvites.email })
-      .from(courseFacultyInvites)
-      .where(eq(courseFacultyInvites.courseId, courseId))
-      .orderBy(courseFacultyInvites.createdAt, courseFacultyInvites.email),
     db
       .select({
         id: classSessions.id,
@@ -119,7 +114,6 @@ export default async function SessionPage({
           ...person,
           isOwner: person.email.toLowerCase() === ownerEmail,
         }))}
-        pending={pendingInstructors}
         canManage={me?.role === 'admin' || isOwner}
       />
       <AttendanceHistory rows={history} />

@@ -1,9 +1,9 @@
 'use server'
 
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { db } from '@/db'
-import { auditLog, facultyInvites, users } from '@/db/schema'
+import { auditLog, users } from '@/db/schema'
 import { isAllowedEmail } from '@/lib/auth'
 import { requireRole } from '@/lib/guards'
 
@@ -17,15 +17,32 @@ function readEmail(formData: FormData, key: string) {
   return typeof value === 'string' ? value.trim().toLowerCase() : ''
 }
 
-// Grants course-creation rights to an address. Two paths, because most of the
-// addresses an admin types here have never signed in:
-//
-//   - the account exists  -> its role is changed immediately
-//   - it doesn't          -> an invite is recorded and claimed at first sign-in
-//
-// Both end at the same place. The split exists so that no privileged `users`
-// row is ever created for an unauthenticated address (see facultyInvites in
-// db/schema.ts).
+// Promotes a student who is already here. Scoped to role='student' so it can
+// never demote an admin, and the audit entry is only written if the update
+// actually moved something.
+async function promoteToFaculty(email: string, actor: string, from: string) {
+  const promoted = await db
+    .update(users)
+    .set({ role: 'faculty' })
+    .where(and(eq(users.email, email), eq(users.role, 'student')))
+    .returning({ email: users.email })
+
+  if (promoted.length) {
+    await db.insert(auditLog).values({
+      actorEmail: actor,
+      action: 'role.change',
+      subject: email,
+      detail: { from, to: 'faculty' },
+    })
+  }
+}
+
+// Grants course-creation rights to an address, whether or not it has ever
+// signed in -- an address that has not gets its `users` row written here, with
+// the local part of the email standing in as a name until Google supplies a
+// real one at first sign-in. That row is privileged before anyone has
+// authenticated as it, which is only tolerable because isAllowedEmail() below
+// confines every grant to the institute domains.
 export async function grantFacultyAccess(
   _previousState: FacultyAccessState,
   formData: FormData,
@@ -38,8 +55,9 @@ export async function grantFacultyAccess(
     return { error: 'That does not look like an email address.' }
   }
 
-  // An address outside the sign-in allowlist can never claim its invite, so it
-  // would sit in the table forever looking like it had been granted something.
+  // An address outside the sign-in allowlist can never reach the app, so the
+  // grant would be an account nobody can ever log into -- and, worse, a
+  // faculty row for an address the institute does not control.
   if (!isAllowedEmail(email)) {
     return {
       error: 'That address cannot sign in. Only allowed institute domains can be made faculty.',
@@ -59,40 +77,46 @@ export async function grantFacultyAccess(
       return { notice: `${email} can already add courses.` }
     }
 
-    await db.update(users).set({ role: 'faculty' }).where(eq(users.email, email))
-    await db.insert(auditLog).values({
-      actorEmail: actor,
-      action: 'role.change',
-      subject: email,
-      detail: { from: existing.role, to: 'faculty' },
-    })
+    await promoteToFaculty(email, actor, existing.role)
 
     revalidatePath('/admin/faculty')
     return { notice: `${email} can now add courses.` }
   }
 
-  const [invited] = await db
-    .insert(facultyInvites)
-    .values({ email, invitedByEmail: actor })
+  const [created] = await db
+    .insert(users)
+    .values({
+      email,
+      name: email.split('@')[0],
+      role: 'faculty',
+      campus: email.split('@')[1],
+    })
     .onConflictDoNothing()
-    .returning({ email: facultyInvites.email })
+    .returning({ email: users.email })
 
-  if (!invited) return { notice: `${email} is already on the list.` }
-
-  await db.insert(auditLog).values({
-    actorEmail: actor,
-    action: 'faculty_invite.create',
-    subject: email,
-  })
+  if (created) {
+    await db.insert(auditLog).values({
+      actorEmail: actor,
+      action: 'role.change',
+      subject: email,
+      detail: { to: 'faculty', created: true },
+    })
+  } else {
+    // The row appeared between the lookup above and this insert -- either the
+    // address signed in as a student, or another admin granted it. Either way
+    // the promotion is the same one the existing-account path runs.
+    await promoteToFaculty(email, actor, 'student')
+  }
 
   revalidatePath('/admin/faculty')
-  return { notice: `${email} becomes faculty the first time they sign in.` }
+  return { notice: `${email} can now add courses.` }
 }
 
-// Withdraws access, from either side of that split -- a faculty account goes
-// back to being a student, an unclaimed invite is deleted. Courses the account
-// already owns are left alone: deleting them would take their sessions and
+// Withdraws access: the account goes back to being a student. Courses it
+// already owns are left alone -- deleting them would take their sessions and
 // attendance history with them, so they stay put and stop being reachable.
+// The row itself stays too, even for an address that never signed in; an
+// unprivileged users row is harmless and the audit log still points at it.
 export async function revokeFacultyAccess(
   _previousState: FacultyAccessState,
   formData: FormData,
@@ -112,36 +136,18 @@ export async function revokeFacultyAccess(
     return { error: `${email} is an admin. Admin rights have to be removed first.` }
   }
 
-  if (existing?.role === 'faculty') {
-    await db.update(users).set({ role: 'student' }).where(eq(users.email, email))
-    await db.insert(auditLog).values({
-      actorEmail: actor,
-      action: 'role.change',
-      subject: email,
-      detail: { from: 'faculty', to: 'student' },
-    })
-
-    // A claimed invite would re-grant the role on their next sign-in and
-    // silently undo this.
-    await db.delete(facultyInvites).where(eq(facultyInvites.email, email))
-
-    revalidatePath('/admin/faculty')
-    return { notice: `${email} can no longer add courses.` }
+  if (existing?.role !== 'faculty') {
+    return { error: `${email} does not have faculty access.` }
   }
 
-  const [cancelled] = await db
-    .delete(facultyInvites)
-    .where(and(eq(facultyInvites.email, email), isNull(facultyInvites.claimedAt)))
-    .returning({ email: facultyInvites.email })
-
-  if (!cancelled) return { error: `${email} does not have faculty access.` }
-
+  await db.update(users).set({ role: 'student' }).where(eq(users.email, email))
   await db.insert(auditLog).values({
     actorEmail: actor,
-    action: 'faculty_invite.cancel',
+    action: 'role.change',
     subject: email,
+    detail: { from: 'faculty', to: 'student' },
   })
 
   revalidatePath('/admin/faculty')
-  return { notice: `Invite for ${email} cancelled.` }
+  return { notice: `${email} can no longer add courses.` }
 }

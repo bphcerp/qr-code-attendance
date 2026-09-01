@@ -1,8 +1,8 @@
 import NextAuth from 'next-auth'
 import Google from 'next-auth/providers/google'
-import { and, eq, isNull } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { db } from '@/db'
-import { auditLog, courseFaculty, courseFacultyInvites, facultyInvites, users } from '@/db/schema'
+import { users } from '@/db/schema'
 
 const allowedDomains = (process.env.ALLOWED_EMAIL_DOMAINS ?? '')
   .split(',')
@@ -27,82 +27,23 @@ export function isAllowedEmail(email: string | null | undefined) {
   return allowedDomains.includes(domain)
 }
 
-// Turns an admin's pre-authorisation into a real role, once and only once, at
-// the moment the invited address first authenticates. Runs on every sign-in,
-// which is cheap (a primary-key lookup that misses for everyone but the
-// handful of invited addresses) and is nowhere near the per-request path.
+// The row every sign-in lands on. Exported so scripts/verifyFacultyAccess.ts
+// can exercise it directly -- it hangs off the signIn callback, which needs
+// Google to fire before it runs.
 //
-// The promotion is scoped to role='student' so a re-issued invite can never
-// demote an admin, and the invite is marked claimed regardless -- an invite for
-// someone who is already faculty has still been answered.
-export async function claimFacultyInvite(email: string) {
-  const [invite] = await db
-    .select({ invitedByEmail: facultyInvites.invitedByEmail })
-    .from(facultyInvites)
-    .where(and(eq(facultyInvites.email, email), isNull(facultyInvites.claimedAt)))
-  if (!invite) return
-
-  const promoted = await db
-    .update(users)
-    .set({ role: 'faculty' })
-    .where(and(eq(users.email, email), eq(users.role, 'student')))
-    .returning({ email: users.email })
-
+// Every new account is a student. Role is never inferred from the email
+// pattern -- a wrong guess in either direction is a privilege bug -- and an
+// existing user's role is deliberately left untouched on re-login.
+//
+// The name is the one field that is overwritten. An admin granting faculty
+// access to an address that has not signed in creates the row with the local
+// part of the email standing in for a name, and this is the first moment a
+// real one exists to replace it with.
+export async function recordSignIn(email: string, name: string | null | undefined) {
   await db
-    .update(facultyInvites)
-    .set({ claimedAt: new Date() })
-    .where(eq(facultyInvites.email, email))
-
-  if (promoted.length) {
-    await db.insert(auditLog).values({
-      actorEmail: invite.invitedByEmail,
-      action: 'role.change',
-      subject: email,
-      detail: { from: 'student', to: 'faculty', via: 'faculty_invite' },
-    })
-  }
-}
-
-// Claims every course membership pre-authorised for this address. The invite
-// deletion is the concurrency gate: only the transaction that deletes a row
-// may create its membership and audit entry.
-export async function claimCourseFacultyInvites(email: string) {
-  await db.transaction(async (tx) => {
-    const invites = await tx
-      .select({
-        courseId: courseFacultyInvites.courseId,
-        invitedByEmail: courseFacultyInvites.invitedByEmail,
-      })
-      .from(courseFacultyInvites)
-      .where(eq(courseFacultyInvites.email, email))
-
-    for (const invite of invites) {
-      const [claimed] = await tx
-        .delete(courseFacultyInvites)
-        .where(and(
-          eq(courseFacultyInvites.courseId, invite.courseId),
-          eq(courseFacultyInvites.email, email),
-        ))
-        .returning({ courseId: courseFacultyInvites.courseId })
-      if (!claimed) continue
-
-      await tx
-        .insert(courseFaculty)
-        .values({
-          courseId: invite.courseId,
-          facultyEmail: email,
-          addedByEmail: invite.invitedByEmail,
-        })
-        .onConflictDoNothing()
-
-      await tx.insert(auditLog).values({
-        actorEmail: invite.invitedByEmail,
-        action: 'course_faculty_invite.claim',
-        subject: email,
-        detail: { courseId: invite.courseId },
-      })
-    }
-  })
+    .insert(users)
+    .values({ email, name: name ?? email, campus: email.split('@')[1] })
+    .onConflictDoUpdate({ target: users.email, set: { name: name ?? email } })
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -130,16 +71,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const email = user.email?.toLowerCase()
       if (!isAllowedEmail(email)) return false
 
-      // Every new account is a student. Role is never inferred from the email
-      // pattern -- a wrong guess in either direction is a privilege bug -- and
-      // an existing user's role is deliberately left untouched on re-login.
-      await db
-        .insert(users)
-        .values({ email: email!, name: user.name ?? email!, campus: email!.split('@')[1] })
-        .onConflictDoNothing()
-
-      await claimFacultyInvite(email!)
-      await claimCourseFacultyInvites(email!)
+      await recordSignIn(email!, user.name)
 
       return true
     },

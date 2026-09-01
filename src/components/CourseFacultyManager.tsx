@@ -9,7 +9,6 @@ import {
 } from '@/app/courseActions'
 import { Button } from '@/components/ui/button'
 import Spinner from '@/components/ui/spinner'
-import StatusChip from '@/components/StatusChip'
 
 type Instructor = {
   email: string
@@ -22,12 +21,10 @@ const initialState: CourseFacultyState = {}
 export default function CourseFacultyManager({
   courseId,
   instructors,
-  pending,
   canManage,
 }: {
   courseId: string
   instructors: Instructor[]
-  pending: { email: string }[]
   canManage: boolean
 }) {
   const [state, addAction, adding] = useActionState(addCourseFaculty, initialState)
@@ -37,7 +34,7 @@ export default function CourseFacultyManager({
       <div className="border-b border-border p-5">
         <h2 className="font-bold text-card-foreground">Teaching team</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Active instructors can run sessions and manage the roster; pending addresses join after first sign-in.
+          Everyone here can run sessions and manage the roster. Only the owner can change the list.
         </p>
       </div>
 
@@ -60,20 +57,6 @@ export default function CourseFacultyManager({
             </div>
             {canManage && !instructor.isOwner && (
               <RemoveInstructorForm courseId={courseId} email={instructor.email} />
-            )}
-          </li>
-        ))}
-        {pending.map((invite) => (
-          <li
-            key={`pending:${invite.email}`}
-            className="flex flex-wrap items-center justify-between gap-3 p-4"
-          >
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <p className="font-mono text-sm break-all text-card-foreground">{invite.email}</p>
-              <StatusChip tone="pending">Pending</StatusChip>
-            </div>
-            {canManage && (
-              <RemoveInstructorForm courseId={courseId} email={invite.email} label="Cancel" />
             )}
           </li>
         ))}
@@ -100,7 +83,7 @@ export default function CourseFacultyManager({
               className="mt-2 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-card-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20"
             />
             <span className="mt-1.5 block text-xs text-muted-foreground">
-              They can join even if they have not signed in before.
+              They get access straight away, whether or not they have signed in before.
             </span>
           </label>
           <Button type="submit" className="h-10 sm:px-5" disabled={adding}>
@@ -123,15 +106,7 @@ export default function CourseFacultyManager({
   )
 }
 
-function RemoveInstructorForm({
-  courseId,
-  email,
-  label = 'Remove',
-}: {
-  courseId: string
-  email: string
-  label?: string
-}) {
+function RemoveInstructorForm({ courseId, email }: { courseId: string; email: string }) {
   const [state, action, pending] = useActionState(removeCourseFaculty, initialState)
 
   return (
@@ -140,7 +115,7 @@ function RemoveInstructorForm({
       <input type="hidden" name="email" value={email} />
       <Button type="submit" variant="outline" size="sm" disabled={pending}>
         {pending ? <Spinner /> : <X />}
-        {label}
+        Remove
       </Button>
       {state.error && (
         <span role="alert" className="text-xs text-destructive">
