@@ -47,15 +47,23 @@ at the `postgres` role on the session pooler (port 5432). Pointing
 ## Verification
 
 ```
-npx tsx --env-file=.env.local scripts/verifyDisplay.ts   # needs dev server on 3001
 npx tsx --env-file=.env.local scripts/verifyMark.ts
-npx tsx --env-file=.env.local scripts/verifyApp.ts       # needs dev server on 3001
+npx tsx --env-file=.env.local scripts/verifyRoster.ts
 npx tsx --env-file=.env.local scripts/verifyReport.ts
+npx tsx --env-file=.env.local scripts/verifyDisplay.ts        # needs dev server on 3001
+npx tsx --env-file=.env.local scripts/verifyApp.ts            # needs dev server on 3001
+npx tsx --env-file=.env.local scripts/verifyFacultyAccess.ts  # needs dev server on 3001
 ```
 
-59 checks across the first three. There's no unit-test framework and none is
+105 checks across the six. There's no unit-test framework and none is
 wanted here -- these scripts exercise the real database and real HTTP, which
 is where every bug found so far actually lived.
+
+Run the server for the last three with `npm run dev -- -p 3001`, not
+`next start`. Auth.js only trusts the request host automatically in dev and on
+Vercel, so a production-mode server on localhost answers every
+`/api/auth/session` call with `UntrustedHost` and all three suites fail on the
+first fetch.
 
 `verifyApp.ts` mints an Auth.js session cookie itself. The cookie is just a
 JWT signed with `AUTH_SECRET`, and there's no Google OAuth client set up for
