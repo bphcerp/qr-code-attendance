@@ -8,6 +8,8 @@ import SessionControl from '@/components/SessionControl'
 import CourseRosterUpload from '@/components/CourseRosterUpload'
 import AttendanceHistory, { type HistoryRow } from '@/components/AttendanceHistory'
 import CourseFacultyManager from '@/components/CourseFacultyManager'
+import AttendanceReport from '@/components/AttendanceReport'
+import { getCourseAttendanceReport } from '@/lib/attendanceReport'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,7 +26,7 @@ export default async function SessionPage({
   // course and open-session are independent of each other and of `me` -- the
   // parent layout already fetched `me` for this request, so getCurrentUser()
   // is a cache() hit rather than a fourth round trip.
-  const [me, [course], instructors, [open], [rosterCount], [enrollmentCount], rosterRows, sessions] = await Promise.all([
+  const [me, [course], instructors, [open], [rosterCount], [enrollmentCount], rosterRows, sessions, report] = await Promise.all([
     getCurrentUser(email),
     db
       .select({
@@ -68,6 +70,7 @@ export default async function SessionPage({
       .from(classSessions)
       .where(and(eq(classSessions.courseId, courseId), isNotNull(classSessions.endedAt)))
       .orderBy(desc(classSessions.startedAt)),
+    getCourseAttendanceReport(courseId),
   ])
 
   // 404 rather than 403 on someone else's course: a wrong answer here tells the
@@ -117,6 +120,7 @@ export default async function SessionPage({
         canManage={me?.role === 'admin' || isOwner}
       />
       <AttendanceHistory rows={history} />
+      <AttendanceReport courseCode={course.code} report={report} />
     </div>
   )
 }

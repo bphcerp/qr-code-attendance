@@ -50,15 +50,32 @@ at the `postgres` role on the session pooler (port 5432). Pointing
 npx tsx --env-file=.env.local scripts/verifyDisplay.ts   # needs dev server on 3001
 npx tsx --env-file=.env.local scripts/verifyMark.ts
 npx tsx --env-file=.env.local scripts/verifyApp.ts       # needs dev server on 3001
+npx tsx --env-file=.env.local scripts/verifyReport.ts
 ```
 
-59 checks across the three. There's no unit-test framework and none is
+59 checks across the first three. There's no unit-test framework and none is
 wanted here -- these scripts exercise the real database and real HTTP, which
 is where every bug found so far actually lived.
 
 `verifyApp.ts` mints an Auth.js session cookie itself. The cookie is just a
 JWT signed with `AUTH_SECRET`, and there's no Google OAuth client set up for
 local dev, so this is the only way to reach a signed-in screen at all.
+
+## Reporting
+
+The faculty course page carries a consolidated report: every student on the
+roster as a row, every **completed** class as a column, present/absent in the
+cells, with a per-student total and percentage and a per-class total along the
+bottom. "Download CSV" writes the same grid to a file.
+
+A live class is deliberately excluded -- its numbers move while it runs, and
+the attendance percentage on the student home page is computed over ended
+sessions only, so counting a live one here would make the two screens
+disagree. The roster fallback is the same one the live-session stats use: the
+uploaded roster when there is one, otherwise the enrolled accounts. A student
+who marked attendance but is missing from the uploaded roster still appears,
+tagged "Not on roster" -- dropping a real record because a spreadsheet was
+incomplete is the one failure a report like this cannot have.
 
 ## Design system
 
@@ -83,7 +100,7 @@ Two rules shadcn will fight, so override deliberately:
 
 Roster add-by-search was removed; Excel and CSV upload are the only ways to
 add students. Still missing: faculty review dashboard, review queue, manual
-override, CSV export, student review requests, `/device` and the rebind
+override, student review requests, `/device` and the rebind
 approval flow, and every admin screen except `/admin/faculty` -- role
 changes above faculty still go through `scripts/seedAdmin.ts`. A retention
 job to purge `lat`/`lng`/`accuracy`/`ip` from `attendanceRecords` after one

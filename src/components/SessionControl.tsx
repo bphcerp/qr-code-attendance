@@ -17,6 +17,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import { courseSlug, downloadTimestamp } from '@/lib/downloadName'
 import { STATIC_MINUTES_MAX } from '@/lib/tokenFormat'
 
 type OpenSession = {
@@ -284,7 +285,7 @@ export default function SessionControl({
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
     anchor.href = url
-    anchor.download = `${courseCode.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '')}-${downloadTimestamp()}.png`
+    anchor.download = `${courseSlug(courseCode)}-${downloadTimestamp()}.png`
     document.body.appendChild(anchor)
     anchor.click()
     anchor.remove()
@@ -782,12 +783,6 @@ function displayStorageKey(sessionId: string) {
 
 function presentationStorageKey(sessionId: string) {
   return `attendance-presentation:${sessionId}`
-}
-
-function downloadTimestamp() {
-  const date = new Date()
-  const pad = (value: number) => String(value).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}`
 }
 
 function formatTimestamp(value: string) {
