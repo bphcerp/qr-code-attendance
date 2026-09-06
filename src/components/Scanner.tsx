@@ -46,9 +46,18 @@ const failureLabels: Record<string, string> = {
   unauthenticated: 'Your sign-in expired. Sign in again.',
 }
 
-// Retrying only helps when the token itself was the problem. Everything else is
-// settled -- re-scanning an already-marked student just produces the same 409.
-const retryable = new Set(['invalid_token', 'token_expired', 'bad_request', 'unknown'])
+// Retrying only helps when the token itself was the problem, or when the server
+// hit a transient error. Everything else is settled -- re-scanning an
+// already-marked student just produces the same 409. `internal_error` is the 500
+// body: it must offer a retry so a hiccup mid-class isn't a dead end with no way
+// forward.
+const retryable = new Set([
+  'invalid_token',
+  'token_expired',
+  'bad_request',
+  'unknown',
+  'internal_error',
+])
 
 export default function Scanner({
   sessionId,

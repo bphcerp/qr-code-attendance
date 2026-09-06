@@ -30,13 +30,29 @@ export async function replaceCourseRoster(
     // Enrol matching accounts now. Relying only on the app-layout sync means a
     // student with an already-mounted layout does not see the new course until
     // a full reload or their next sign-in.
-    const accounts = await tx.select({ email: users.email }).from(users)
-    const matchingAccounts = accounts
-      .filter((account) => rosterIds.has(studentIdFromEmail(account.email)))
-      .map((account) => ({ courseId, studentEmail: account.email }))
+    //
+    // Match in SQL against the uploaded IDs rather than reading the whole users
+    // table into Node -- the same full-scan-then-filter pattern the layout sync
+    // had. The `lower(replace(split_part(...)))` expression is normalizeStudentId
+    // applied to the email local part, in Postgres.
+    const ids = [...rosterIds]
+    const matchingAccounts = ids.length
+      ? await tx
+          .select({ email: users.email })
+          .from(users)
+          .where(
+            inArray(
+              sql`lower(replace(split_part(${users.email}, '@', 1), ' ', ''))`,
+              ids,
+            ),
+          )
+      : []
 
     if (matchingAccounts.length) {
-      await tx.insert(enrollments).values(matchingAccounts).onConflictDoNothing()
+      await tx
+        .insert(enrollments)
+        .values(matchingAccounts.map((account) => ({ courseId, studentEmail: account.email })))
+        .onConflictDoNothing()
     }
   })
 }

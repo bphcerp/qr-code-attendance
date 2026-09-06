@@ -24,3 +24,8 @@ export const db = new Proxy({} as PostgresJsDatabase<typeof schema>, {
     return Reflect.get(instance, prop, instance)
   },
 })
+
+// The transaction handle Drizzle hands to a `db.transaction` callback, derived
+// from `db` itself so a helper can accept `tx` without importing Drizzle's
+// internal generics.
+export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]

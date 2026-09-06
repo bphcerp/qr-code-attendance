@@ -2,9 +2,26 @@ import { eq } from 'drizzle-orm'
 import { db } from '../src/db'
 import { users, courses, enrollments, classSessions, attendanceRecords, devices } from '../src/db/schema'
 import { newSessionSecret, deriveQrToken, deriveCode, verifyToken, currentCounter } from '../src/lib/token'
-import { checkDevice, serializeDeviceCookie } from '../src/lib/device'
+import {
+  resolveDevice,
+  registerDeviceTx,
+  releaseActiveDevice,
+  serializeDeviceCookie,
+} from '../src/lib/device'
 import { haversineMetres, OUTLIER_METRES } from '../src/lib/geo'
 import { isUniqueViolation } from '../src/db/errors'
+
+// Mirrors how the mark route resolves a device: read-only decision, then the
+// registration write inside a transaction so a failed mark leaves nothing.
+async function markDevice(userEmail: string, cookie: string | undefined, fp: string, ua: string) {
+  const decision = await resolveDevice(userEmail, cookie)
+  if (!decision.ok) return { ok: false as const }
+  if (decision.needsRegistration) {
+    const id = await db.transaction((tx) => registerDeviceTx(tx, userEmail, fp, ua))
+    return { ok: true as const, deviceId: id, justRegistered: true }
+  }
+  return { ok: true as const, deviceId: decision.deviceId!, justRegistered: false }
+}
 
 let pass = 0
 let fail = 0
@@ -58,24 +75,64 @@ async function main() {
   check('unenrolled student is absent from roster', !enrolledRows.some((r) => r.email === CAROL))
 
   console.log('\nDevice binding')
-  const first = await checkDevice(ALICE, undefined, 'fp-alice-phone', 'UA/1')
+  const first = await markDevice(ALICE, undefined, 'fp-alice-phone', 'UA/1')
   check('first mark registers a device', first.ok && first.justRegistered)
   const aliceCookie = first.ok ? serializeDeviceCookie(first.deviceId) : ''
 
-  const second = await checkDevice(ALICE, aliceCookie, 'fp-alice-phone', 'UA/1')
+  const second = await markDevice(ALICE, aliceCookie, 'fp-alice-phone', 'UA/1')
   check('same device passes on the next mark', second.ok && !second.justRegistered)
 
-  const noCookie = await checkDevice(ALICE, undefined, 'fp-alice-phone', 'UA/1')
+  const noCookie = await resolveDevice(ALICE, undefined)
   check('registered student with no cookie is blocked', !noCookie.ok)
 
-  const bobOnAlicesPhone = await checkDevice(BOB, aliceCookie, 'fp-alice-phone', 'UA/1')
+  const bobOnAlicesPhone = await resolveDevice(BOB, aliceCookie)
   check("another student cannot reuse Alice's device cookie", !bobOnAlicesPhone.ok)
 
   const tampered = aliceCookie.slice(0, -3) + 'aaa'
-  check('a tampered cookie signature is rejected', !(await checkDevice(ALICE, tampered, 'fp', 'UA/1')).ok)
+  check('a tampered cookie signature is rejected', !(await resolveDevice(ALICE, tampered)).ok)
+
+  // A cookie whose signature is the right character length but more than that in
+  // bytes used to slip past the length check and make timingSafeEqual throw a
+  // RangeError -- a 500 on an ordinary attendance request. It must return null
+  // (blocked), not throw.
+  let craftedRejected = false
+  try {
+    const [id] = aliceCookie.split('.')
+    const crafted = `${id}.${'é'.repeat(43)}`
+    craftedRejected = !(await resolveDevice(ALICE, crafted)).ok
+  } catch {
+    craftedRejected = false
+  }
+  check('a multibyte-signature cookie is rejected without throwing', craftedRejected)
 
   const [aliceDevices] = await db.select().from(devices).where(eq(devices.userEmail, ALICE))
   check('exactly one active device row for Alice', Boolean(aliceDevices))
+
+  console.log('\nConcurrent first-mark and device release')
+  // Two simultaneous first-marks for one student: the unique index lets one
+  // registration through and rejects the rest with 23505. The mark route adopts
+  // the winner instead of 500ing; here we assert the index actually fires.
+  const carolId = await db.transaction((tx) => registerDeviceTx(tx, CAROL, 'fp-carol', 'UA/9'))
+  let raceRejected = false
+  try {
+    await db.transaction((tx) => registerDeviceTx(tx, CAROL, 'fp-carol', 'UA/9'))
+  } catch (err) {
+    raceRejected = isUniqueViolation(err, 'devices_one_active_per_user')
+  }
+  check('a second concurrent registration is rejected by the unique index', raceRejected)
+
+  const carolCookie = serializeDeviceCookie(carolId)
+  const carolBefore = await resolveDevice(CAROL, carolCookie)
+  check('the registered device is accepted before release', carolBefore.ok && !carolBefore.needsRegistration)
+
+  const releasedCarol = await releaseActiveDevice(CAROL)
+  check('releaseActiveDevice frees an active binding', releasedCarol)
+
+  const carolAfter = await resolveDevice(CAROL, undefined)
+  check('after release the next mark registers again', carolAfter.ok && carolAfter.needsRegistration)
+
+  const releasedAgain = await releaseActiveDevice(CAROL)
+  check('releasing when nothing is bound is a no-op, not an error', !releasedAgain)
 
   console.log('\nOne mark per student per session')
   const counter = currentCounter(session.startedAt, 5)

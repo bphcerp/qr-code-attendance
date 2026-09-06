@@ -7,9 +7,16 @@ import { isUniqueViolation } from '@/db/errors'
 import { clientIp, userAgent } from '@/lib/request'
 import { fetchSession, assertSessionOpen } from '@/lib/displayToken'
 import { verifyToken } from '@/lib/token'
-import { checkDevice, serializeDeviceCookie, DEVICE_COOKIE } from '@/lib/device'
+import {
+  resolveDevice,
+  registerDeviceTx,
+  activeDeviceIdFor,
+  serializeDeviceCookie,
+  DEVICE_COOKIE,
+} from '@/lib/device'
 import { haversineMetres, OUTLIER_METRES, IMPRECISE_ACCURACY_METRES } from '@/lib/geo'
 import { normalizeStudentId, studentIdFromEmail } from '@/lib/studentId'
+import { finiteOrNull } from '@/lib/num'
 
 type Body = {
   sessionId?: string
@@ -67,40 +74,85 @@ export async function POST(req: Request) {
         .onConflictDoNothing()
     }
 
-    // device binding happens before the insert so a rejected device leaves no trace
     const jar = await cookies()
     const ua = userAgent(req)
-    const device = await checkDevice(email, jar.get(DEVICE_COOKIE)?.value, body.fingerprint, ua)
-    if (!device.ok) throw new HttpError(403, 'device_mismatch')
-
     const ip = clientIp(req)
 
-    // one mark per student per session -- the unique index is the authority
-    // here rather than a preceding select, which would race under 600
-    // simultaneous scans
+    // Untrusted coordinates: the client normally sends numbers, but a crafted
+    // request sends a string or NaN, which becomes a 500 the moment it reaches
+    // the double-precision columns. Coerce once, here, and use these below.
+    const lat = finiteOrNull(body.lat)
+    const lng = finiteOrNull(body.lng)
+    const accuracy = finiteOrNull(body.accuracy)
+
+    // The device binding and the attendance record commit together. The
+    // registration used to happen before the insert, so a scan that failed after
+    // it left the phone bound forever with nothing to show for it -- and with no
+    // way to release the binding, that student could never mark again. One
+    // transaction means a failed mark leaves no device behind.
+    //
+    // resolveDevice is read-only, so it runs outside the transaction. If it
+    // decides a new device is needed but loses the race to a simultaneous
+    // first-mark for the same student, the partial unique index rejects the
+    // insert with 23505 -- the old plain insert turned that into a 500. Instead
+    // we adopt the device that won (it is this same student's own) and retry the
+    // insert once, which then hits the attendance unique index and returns the
+    // correct 409 already_marked.
+    const decision = await resolveDevice(email, jar.get(DEVICE_COOKIE)?.value)
+    if (!decision.ok) throw new HttpError(403, 'device_mismatch')
+    const recentlyRebound = decision.recentlyRebound
+
     let recordId: string
-    try {
-      const [row] = await db
-        .insert(attendanceRecords)
-        .values({
-          sessionId: session.id,
-          studentEmail: email,
-          source: verified.kind,
-          deviceId: device.deviceId,
-          fingerprint: body.fingerprint,
-          ip,
-          userAgent: ua,
-          lat: body.lat ?? null,
-          lng: body.lng ?? null,
-          accuracy: body.accuracy ?? null,
+    let deviceId: string
+    let justRegistered = false
+    let needsRegistration = decision.needsRegistration
+    let resolvedDeviceId = decision.deviceId
+
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const result = await db.transaction(async (tx) => {
+          const id = needsRegistration
+            ? await registerDeviceTx(tx, email, body.fingerprint!, ua)
+            : resolvedDeviceId!
+          const [row] = await tx
+            .insert(attendanceRecords)
+            .values({
+              sessionId: session.id,
+              studentEmail: email,
+              source: verified.kind,
+              deviceId: id,
+              fingerprint: body.fingerprint,
+              ip,
+              userAgent: ua,
+              lat,
+              lng,
+              accuracy,
+            })
+            .returning({ id: attendanceRecords.id })
+          return { recordId: row.id, deviceId: id }
         })
-        .returning({ id: attendanceRecords.id })
-      recordId = row.id
-    } catch (err) {
-      if (isUniqueViolation(err, 'attendance_one_per_student_per_session')) {
-        throw new HttpError(409, 'already_marked')
+        recordId = result.recordId
+        deviceId = result.deviceId
+        justRegistered = needsRegistration
+        break
+      } catch (err) {
+        if (
+          needsRegistration &&
+          attempt === 0 &&
+          isUniqueViolation(err, 'devices_one_active_per_user')
+        ) {
+          const existing = await activeDeviceIdFor(email)
+          if (existing) {
+            needsRegistration = false
+            resolvedDeviceId = existing
+            continue
+          }
+        }
+        if (isUniqueViolation(err, 'attendance_one_per_student_per_session')) {
+          throw new HttpError(409, 'already_marked')
+        }
+        throw err
       }
-      throw err
     }
 
     // Soft flags. Nothing below rejects the mark -- these exist so faculty have
@@ -109,12 +161,12 @@ export async function POST(req: Request) {
 
     if (body.geoDenied) {
       flags.push({ kind: 'geo_denied' })
-    } else if (body.lat != null && body.lng != null) {
-      if (body.accuracy != null && body.accuracy > IMPRECISE_ACCURACY_METRES) {
-        flags.push({ kind: 'geo_imprecise', detail: { accuracy: body.accuracy } })
+    } else if (lat != null && lng != null) {
+      if (accuracy != null && accuracy > IMPRECISE_ACCURACY_METRES) {
+        flags.push({ kind: 'geo_imprecise', detail: { accuracy } })
       }
       if (session.roomLat != null && session.roomLng != null) {
-        const metres = haversineMetres(body.lat, body.lng, session.roomLat, session.roomLng)
+        const metres = haversineMetres(lat, lng, session.roomLat, session.roomLng)
         if (metres > OUTLIER_METRES) {
           flags.push({ kind: 'geo_outlier', detail: { metres: Math.round(metres) } })
         }
@@ -122,7 +174,7 @@ export async function POST(req: Request) {
     }
 
     if (verified.kind === 'code') flags.push({ kind: 'code_entry' })
-    if (device.recentlyRebound) flags.push({ kind: 'device_recently_rebound' })
+    if (recentlyRebound) flags.push({ kind: 'device_recently_rebound' })
 
     // A student with no device row yet gets whatever handset is in front of
     // them, which is the one window where someone signed into a friend's
@@ -130,7 +182,7 @@ export async function POST(req: Request) {
     // indistinguishable from that, and blocking would deny the whole cohort
     // its first lecture. So it is recorded instead, and closes by itself the
     // moment that student has marked once.
-    if (device.justRegistered) flags.push({ kind: 'device_first_use' })
+    if (justRegistered) flags.push({ kind: 'device_first_use' })
 
     // One phone marking two students is the proxy signature -- but UA + screen
     // + timezone identifies a phone *model*, so two classmates on the same
@@ -156,8 +208,8 @@ export async function POST(req: Request) {
     }
 
     const res = Response.json({ ok: true, source: verified.kind })
-    if (device.justRegistered) {
-      jar.set(DEVICE_COOKIE, serializeDeviceCookie(device.deviceId), {
+    if (justRegistered) {
+      jar.set(DEVICE_COOKIE, serializeDeviceCookie(deviceId), {
         httpOnly: true,
         sameSite: 'lax',
         secure: process.env.NODE_ENV === 'production',

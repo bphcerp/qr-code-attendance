@@ -101,6 +101,18 @@ branch.
   What makes that tolerable is `isAllowedEmail()`, which every grant path
   checks first, so the address is always one the institute's Workspace
   controls rather than one anybody can register.
+- **A course owner adding a co-teacher promotes that account to `faculty`
+  everywhere, not just on that course** (`addCourseFaculty` in
+  `src/app/courseActions.ts`). This is deliberate, not an oversight, and
+  `verifyFacultyAccess` asserts it. A co-teacher has to be able to run
+  sessions and manage the roster, which means the `faculty` role; scoping the
+  role per-course is a larger model than this app has. The gate that makes it
+  safe is the same one above -- `isAllowedEmail()` confines every grant to the
+  institute domains, so the worst a non-admin owner can do is let another
+  institute address create its own courses. The admin screen
+  (`/admin/faculty`) still gates the identical grant behind an admin check;
+  the two paths reaching the same outcome is intended, so treat this as the
+  documented decision it is rather than tightening it by accident.
 - **`isUniqueViolation` in `src/db/errors.ts` exists because Drizzle wraps
   driver errors.** The Postgres code and constraint name are on `.cause`;
   matching the outer message silently never fires.
