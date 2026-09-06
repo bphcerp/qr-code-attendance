@@ -1,2 +1,0 @@
-CREATE INDEX "courses_faculty_email_idx" ON "courses" USING btree ("faculty_email");--> statement-breakpoint
-CREATE INDEX "enrollments_student_email_idx" ON "enrollments" USING btree ("student_email");

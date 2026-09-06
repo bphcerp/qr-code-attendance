@@ -13,9 +13,14 @@ codebase look arbitrary until you know why they're there.
 1. `npx tsx scripts/localDb.ts init` -- once, sets up the embedded Postgres.
 2. `npx tsx scripts/localDb.ts start` -- starts it on port 55432. Leave this
    running in its own terminal.
-3. `npx drizzle-kit migrate`
+3. `npx drizzle-kit migrate` -- applies `drizzle/0000_baseline.sql`, the single
+   consolidated migration that is the whole schema.
 4. `npm run dev` -- port 3000 is usually taken by something else on this
    machine, so this lands on **3001**.
+5. `npm run seed:students` -- optional. Loads the mess-register student
+   directory (`scripts/seed/student_directory.sql`). It only backs roster
+   add-by-search, so the app runs fine without it. Seeding is not schema, so it
+   is a separate step rather than part of the migration.
 
 `.env.local` drives everything; `.env.example` documents each variable.
 `drizzle-kit` reads `.env.local` explicitly via `drizzle.config.ts` -- it
@@ -44,6 +49,33 @@ at the `postgres` role on the session pooler (port 5432). Pointing
 `DIRECT_URL` at the runtime role instead fails on
 `CREATE SCHEMA IF NOT EXISTS "drizzle"` before it does anything else.
 
+### The migrations were squashed into one baseline
+
+The `0000`–`0008` history was collapsed into a single
+`drizzle/0000_baseline.sql`. This is safe for a fresh database, but production
+already has the old files recorded in `drizzle.__drizzle_migrations` (and the
+ledger already diverges from the repo -- see `docs/design-notes.md`). The
+baseline has a new hash and a newer `when`, so left alone the next production
+deploy would try to run the whole `CREATE TABLE ...` set against the live
+database and fail on the first table that already exists.
+
+`scripts/reconcileMigrationLedger.ts` fixes this by rewriting the ledger to the
+single row the baseline describes, so the migrator treats it as already applied
+and skips it. **Run it once, against production `DIRECT_URL`, from the commit
+you are about to deploy, before that deploy:**
+
+1. Finalize `drizzle/0000_baseline.sql` and commit.
+2. `npm run db:reconcile:prod -- --dry-run` -- prints the baseline hash it would
+   record (no database connection).
+3. `npm run db:reconcile:prod` -- rewrites `drizzle.__drizzle_migrations` in a
+   transaction (refuses without `--force`, refuses a localhost URL).
+4. Confirm the ledger holds exactly one row with that hash.
+5. Deploy. `deployMigrate.ts` now sees the baseline as already applied, skips
+   it, and `next build` proceeds.
+
+This is a one-time step for the squash. Ordinary future migrations
+(`db:generate` -> `db:migrate:prod`) do not need it.
+
 ## Verification
 
 ```
@@ -58,6 +90,21 @@ npx tsx --env-file=.env.local scripts/verifyFacultyAccess.ts  # needs dev server
 105 checks across the six. There's no unit-test framework and none is
 wanted here -- these scripts exercise the real database and real HTTP, which
 is where every bug found so far actually lived.
+
+There is also a Playwright deploy-readiness suite:
+
+```
+npm run test:e2e
+```
+
+It boots the real app (dev server on 3001) against the database built from the
+consolidated baseline and drives both roles in a real browser -- the student
+home / scan / mark flow and the faculty course / session-control / projector
+flow. In the same spirit as the verify scripts, it is real DB + real HTTP +
+real browser, not mocked units. It signs in the way the verify scripts do,
+by minting an Auth.js session cookie, because there is no Google OAuth client
+outside production. It uses the Chromium already on the machine
+(`PLAYWRIGHT_CHROMIUM_PATH` overrides the path) and never downloads one.
 
 Run the server for the last three with `npm run dev -- -p 3001`, not
 `next start`. Auth.js only trusts the request host automatically in dev and on

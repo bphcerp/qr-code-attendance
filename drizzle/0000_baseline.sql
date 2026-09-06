@@ -48,6 +48,22 @@ CREATE TABLE "class_sessions" (
 	"room_lng" double precision
 );
 --> statement-breakpoint
+CREATE TABLE "course_faculty" (
+	"course_id" uuid NOT NULL,
+	"faculty_email" varchar NOT NULL,
+	"added_by_email" varchar,
+	"added_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "course_faculty_course_id_faculty_email_pk" PRIMARY KEY("course_id","faculty_email")
+);
+--> statement-breakpoint
+CREATE TABLE "course_roster" (
+	"course_id" uuid NOT NULL,
+	"student_id" varchar NOT NULL,
+	"student_name" varchar NOT NULL,
+	"uploaded_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "course_roster_course_id_student_id_pk" PRIMARY KEY("course_id","student_id")
+);
+--> statement-breakpoint
 CREATE TABLE "courses" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"code" varchar NOT NULL,
@@ -105,6 +121,13 @@ CREATE TABLE "review_requests" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "student_directory" (
+	"email" varchar PRIMARY KEY NOT NULL,
+	"full_name" varchar NOT NULL,
+	"batch" integer,
+	"source" varchar DEFAULT 'mess-2026-03' NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "users" (
 	"email" varchar PRIMARY KEY NOT NULL,
 	"name" varchar NOT NULL,
@@ -119,6 +142,10 @@ ALTER TABLE "attendance_records" ADD CONSTRAINT "attendance_records_student_emai
 ALTER TABLE "attendance_records" ADD CONSTRAINT "attendance_records_device_id_devices_id_fk" FOREIGN KEY ("device_id") REFERENCES "public"."devices"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "attendance_records" ADD CONSTRAINT "attendance_records_marked_by_email_users_email_fk" FOREIGN KEY ("marked_by_email") REFERENCES "public"."users"("email") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "class_sessions" ADD CONSTRAINT "class_sessions_course_id_courses_id_fk" FOREIGN KEY ("course_id") REFERENCES "public"."courses"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "course_faculty" ADD CONSTRAINT "course_faculty_course_id_courses_id_fk" FOREIGN KEY ("course_id") REFERENCES "public"."courses"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "course_faculty" ADD CONSTRAINT "course_faculty_faculty_email_users_email_fk" FOREIGN KEY ("faculty_email") REFERENCES "public"."users"("email") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "course_faculty" ADD CONSTRAINT "course_faculty_added_by_email_users_email_fk" FOREIGN KEY ("added_by_email") REFERENCES "public"."users"("email") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "course_roster" ADD CONSTRAINT "course_roster_course_id_courses_id_fk" FOREIGN KEY ("course_id") REFERENCES "public"."courses"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "courses" ADD CONSTRAINT "courses_faculty_email_users_email_fk" FOREIGN KEY ("faculty_email") REFERENCES "public"."users"("email") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "device_rebind_requests" ADD CONSTRAINT "device_rebind_requests_user_email_users_email_fk" FOREIGN KEY ("user_email") REFERENCES "public"."users"("email") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "device_rebind_requests" ADD CONSTRAINT "device_rebind_requests_reviewed_by_email_users_email_fk" FOREIGN KEY ("reviewed_by_email") REFERENCES "public"."users"("email") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -135,6 +162,34 @@ CREATE UNIQUE INDEX "attendance_one_per_student_per_session" ON "attendance_reco
 CREATE INDEX "attendance_fingerprint_idx" ON "attendance_records" USING btree ("session_id","fingerprint");--> statement-breakpoint
 CREATE INDEX "audit_log_created_idx" ON "audit_log" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "class_sessions_course_idx" ON "class_sessions" USING btree ("course_id","started_at");--> statement-breakpoint
+CREATE INDEX "course_faculty_email_idx" ON "course_faculty" USING btree ("faculty_email");--> statement-breakpoint
+CREATE INDEX "course_roster_course_idx" ON "course_roster" USING btree ("course_id");--> statement-breakpoint
+CREATE INDEX "courses_faculty_email_idx" ON "courses" USING btree ("faculty_email");--> statement-breakpoint
 CREATE UNIQUE INDEX "devices_one_active_per_user" ON "devices" USING btree ("user_email") WHERE revoked_at is null;--> statement-breakpoint
 CREATE INDEX "display_tokens_session_idx" ON "display_tokens" USING btree ("session_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "review_one_per_student_per_session" ON "review_requests" USING btree ("session_id","student_email");
+CREATE INDEX "enrollments_student_email_idx" ON "enrollments" USING btree ("student_email");--> statement-breakpoint
+CREATE UNIQUE INDEX "review_one_per_student_per_session" ON "review_requests" USING btree ("session_id","student_email");--> statement-breakpoint
+CREATE INDEX "student_directory_name_idx" ON "student_directory" USING btree ("full_name");--> statement-breakpoint
+-- Privileges for the runtime role, consolidated from the old 0005/0006
+-- migrations. Production connects as attendance_app -- a role with table-level
+-- grants and no ownership, created by the parked security-hardening work -- so
+-- every table it writes needs an explicit grant. users.UPDATE and devices.UPDATE
+-- cover role changes and revoking a device binding; course_faculty is written by
+-- the faculty-access screen. Guarded so this is a no-op on any database that
+-- never got the runtime role: the local embedded Postgres and any fresh checkout.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'attendance_app') THEN
+    GRANT UPDATE ON TABLE public.users TO attendance_app;
+    GRANT UPDATE ON TABLE public.devices TO attendance_app;
+    GRANT SELECT, INSERT, DELETE ON TABLE public.course_faculty TO attendance_app;
+  END IF;
+END
+$$;--> statement-breakpoint
+-- Every existing course owner becomes a member of their own course, so
+-- permission checks read one table (course_faculty) rather than also checking
+-- ownership and silently diverging the first time someone forgets. Idempotent,
+-- and a no-op on a fresh database with no courses yet.
+INSERT INTO "course_faculty" ("course_id", "faculty_email", "added_by_email")
+SELECT "id", "faculty_email", "faculty_email" FROM "courses"
+ON CONFLICT DO NOTHING;

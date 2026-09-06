@@ -5,64 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1785959972226,
-      "tag": "0000_wooden_roland_deschain",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1786353924073,
-      "tag": "0001_broken_lilith",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1786536000000,
-      "tag": "0002_course_roster",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1786554973664,
-      "tag": "0003_lame_slyde",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1786618632451,
-      "tag": "0004_faculty_invites",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1786632181000,
-      "tag": "0005_faculty_invites_grants",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1786632498000,
-      "tag": "0006_course_faculty",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "7",
-      "when": 1786645848812,
-      "tag": "0007_course_faculty_invites",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "7",
-      "when": 1786732800000,
-      "tag": "0008_drop_faculty_invites",
+      "when": 1788721912665,
+      "tag": "0000_baseline",
       "breakpoints": true
     }
   ]

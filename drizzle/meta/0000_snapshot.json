@@ -1,5 +1,5 @@
 {
-  "id": "be25ad87-c12d-4705-8aae-48dacc9d5757",
+  "id": "e5b979d3-1db7-45fb-979d-571a9a1c19cc",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -455,6 +455,184 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.course_faculty": {
+      "name": "course_faculty",
+      "schema": "",
+      "columns": {
+        "course_id": {
+          "name": "course_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "faculty_email": {
+          "name": "faculty_email",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "added_by_email": {
+          "name": "added_by_email",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "added_at": {
+          "name": "added_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "course_faculty_email_idx": {
+          "name": "course_faculty_email_idx",
+          "columns": [
+            {
+              "expression": "faculty_email",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "course_faculty_course_id_courses_id_fk": {
+          "name": "course_faculty_course_id_courses_id_fk",
+          "tableFrom": "course_faculty",
+          "tableTo": "courses",
+          "columnsFrom": [
+            "course_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "course_faculty_faculty_email_users_email_fk": {
+          "name": "course_faculty_faculty_email_users_email_fk",
+          "tableFrom": "course_faculty",
+          "tableTo": "users",
+          "columnsFrom": [
+            "faculty_email"
+          ],
+          "columnsTo": [
+            "email"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "course_faculty_added_by_email_users_email_fk": {
+          "name": "course_faculty_added_by_email_users_email_fk",
+          "tableFrom": "course_faculty",
+          "tableTo": "users",
+          "columnsFrom": [
+            "added_by_email"
+          ],
+          "columnsTo": [
+            "email"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "course_faculty_course_id_faculty_email_pk": {
+          "name": "course_faculty_course_id_faculty_email_pk",
+          "columns": [
+            "course_id",
+            "faculty_email"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.course_roster": {
+      "name": "course_roster",
+      "schema": "",
+      "columns": {
+        "course_id": {
+          "name": "course_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "student_id": {
+          "name": "student_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "student_name": {
+          "name": "student_name",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "uploaded_at": {
+          "name": "uploaded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "course_roster_course_idx": {
+          "name": "course_roster_course_idx",
+          "columns": [
+            {
+              "expression": "course_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "course_roster_course_id_courses_id_fk": {
+          "name": "course_roster_course_id_courses_id_fk",
+          "tableFrom": "course_roster",
+          "tableTo": "courses",
+          "columnsFrom": [
+            "course_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "course_roster_course_id_student_id_pk": {
+          "name": "course_roster_course_id_student_id_pk",
+          "columns": [
+            "course_id",
+            "student_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.courses": {
       "name": "courses",
       "schema": "",
@@ -485,7 +663,23 @@
           "notNull": true
         }
       },
-      "indexes": {},
+      "indexes": {
+        "courses_faculty_email_idx": {
+          "name": "courses_faculty_email_idx",
+          "columns": [
+            {
+              "expression": "faculty_email",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "courses_faculty_email_users_email_fk": {
           "name": "courses_faculty_email_users_email_fk",
@@ -819,7 +1013,23 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "enrollments_student_email_idx": {
+          "name": "enrollments_student_email_idx",
+          "columns": [
+            {
+              "expression": "student_email",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "enrollments_course_id_courses_id_fk": {
           "name": "enrollments_course_id_courses_id_fk",
@@ -983,6 +1193,60 @@
           "onUpdate": "no action"
         }
       },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.student_directory": {
+      "name": "student_directory",
+      "schema": "",
+      "columns": {
+        "email": {
+          "name": "email",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "full_name": {
+          "name": "full_name",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "batch": {
+          "name": "batch",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source": {
+          "name": "source",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'mess-2026-03'"
+        }
+      },
+      "indexes": {
+        "student_directory_name_idx": {
+          "name": "student_directory_name_idx",
+          "columns": [
+            {
+              "expression": "full_name",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

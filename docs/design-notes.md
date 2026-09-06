@@ -53,6 +53,20 @@ would look fine until the first query hits a column that was never added.
 Renumber the files and regenerate the `when` values before merging that
 branch.
 
+**The migrations are now a single baseline.** `0000`–`0008` were squashed into
+one `drizzle/0000_baseline.sql` (the whole current schema, plus the guarded
+`attendance_app` grants and the `course_faculty` owner backfill; the
+`student_directory` seed moved out to `scripts/seed/student_directory.sql`).
+The same trap as above applies with teeth: the baseline's `when`
+(`1788721912665`) is newer than production's newest record, so a deploy would
+try to create every table afresh and fail. The baseline is safe for a fresh
+database only. Production is reconciled by `scripts/reconcileMigrationLedger.ts`
+(`npm run db:reconcile:prod`), which rewrites `drizzle.__drizzle_migrations` to
+the single baseline row -- hash and `created_at` taken from
+`readMigrationFiles()` so they are exactly what the migrator would have
+inserted -- run once against `DIRECT_URL` before the squash deploys. Full
+runbook in the README deploy section.
+
 ## Things that are the way they are on purpose
 
 - **The QR payload carries no counter.** Ten characters instead of thirteen;
