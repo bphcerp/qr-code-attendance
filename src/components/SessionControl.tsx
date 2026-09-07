@@ -46,12 +46,9 @@ type Stats = {
 }
 
 const flagLabels: Record<string, string> = {
-  fingerprint_collision: 'Same phone model as another student',
-  device_first_use: 'First scan on a new device',
   geo_outlier: 'Far from the room',
   geo_denied: 'Location refused',
   geo_imprecise: 'Weak GPS',
-  device_recently_rebound: 'Device changed recently',
 }
 
 const errorLabels: Record<string, string> = {

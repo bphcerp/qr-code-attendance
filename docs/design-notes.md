@@ -27,15 +27,15 @@ Worth knowing before touching migrations again:
   `0005_privacy_and_access_controls` as applied (09:12 on 13 Aug), and their
   RLS, policies and the `attendance_app` role are in place -- but the
   columns 0005 drops (`display_tokens.pinned_ip`, `audit_log.ip`,
-  `attendance_records.lat/lng/accuracy`, `devices.fingerprint`) were added
+  `attendance_records.lat/lng/accuracy`) were added
   back by hand at ~10:55 to end the outage. Neither file is on `master`
   anymore; both live on `security-hardening-wip`.
 - RLS is therefore enabled on 14 tables in production, and it's live:
   `attendance_app` exists, has `LOGIN`, does not have `BYPASSRLS`, and is
   what `DATABASE_URL` connects as. The app works because 0005's policies
-  grant it what it needs. `review_requests` and `device_rebind_requests`
-  carry restrictive deny-all policies, which is fine only for as long as
-  nothing reads them -- the review queue isn't built yet.
+  grant it what it needs. `review_requests` carries a restrictive deny-all
+  policy, which is fine only for as long as nothing reads it -- the review
+  queue isn't built yet.
 - That role has no DDL rights, so migrations can't run over `DATABASE_URL`.
   They need `DIRECT_URL` pointed at the `postgres` role on the session
   pooler (5432).
@@ -77,28 +77,11 @@ runbook in the README deploy section.
   access control: anyone holding that link can mark from anywhere.
 - **Display liveness comes from `lastPingAt` in Postgres**, not from open
   connections. Serverless instances share no memory.
-- **Nothing is ever blocked on a fingerprint, only flagged.** UA + screen +
-  timezone identifies a phone *model*, not a phone: two classmates on the
-  same Redmi produce a byte-identical hash from two handsets. A hard block
-  would reject honest students, worst of all in the first lecture when
-  nobody has a device row yet to tell them apart. The mark-time flag carries
-  the count it saw at that moment; the cluster-size judgement still belongs
-  at roster read. The dashboard label says "Same phone model as another
-  student," not "same device" -- device binding has already proven they're
-  on separate handsets by the time this flag can fire, so the copy
-  shouldn't imply otherwise.
-- **A student with no device row yet gets whatever handset is in front of
-  them**, which is the one window where a colluding pair can proxy -- sign
-  into the absent student's Google account and scan. It closes permanently
-  once that student has marked once. It's not blockable, because an honest
-  first-timer looks identical, so it raises `device_first_use` instead. The
-  structural fix is `/device` with an approved binding step, which is not
-  built.
 - **The projector link is never printed on screen, even to the faculty who
-  generated it.** Once issued it's copy/open-only. Device binding and geo
-  don't help against a leaked link -- a student who has it can open the
-  live QR from their own room on their own already-registered phone, geo
-  just flags the distance rather than blocking it. The podium screen gets
+  generated it.** Once issued it's copy/open-only. Geo doesn't help against
+  a leaked link -- a student who has it can open the live QR from their own
+  room on their own phone, geo just flags the distance rather than blocking
+  it. The podium screen gets
   shared over Zoom for hybrid sections and glanced at by whoever's standing
   nearby, so the raw URL sitting in plain text was the easiest way for that
   leak to happen by accident.

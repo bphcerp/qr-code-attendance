@@ -12,7 +12,6 @@ import {
   uniqueIndex,
   index,
 } from 'drizzle-orm/pg-core'
-import { sql } from 'drizzle-orm'
 
 export const roleEnum = pgEnum('role', ['student', 'faculty', 'admin'])
 export const attendanceSourceEnum = pgEnum('attendance_source', ['qr', 'code', 'manual'])
@@ -25,28 +24,6 @@ export const users = pgTable('users', {
   campus: varchar('campus'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
-
-export const devices = pgTable(
-  'devices',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    userEmail: varchar('user_email')
-      .notNull()
-      .references(() => users.email, { onDelete: 'cascade' }),
-    fingerprint: varchar('fingerprint').notNull(),
-    userAgent: text('user_agent'),
-    registeredAt: timestamp('registered_at', { withTimezone: true }).notNull().defaultNow(),
-    revokedAt: timestamp('revoked_at', { withTimezone: true }),
-  },
-  (table) => [
-    // one active device per student, enforced here rather than in the mark
-    // endpoint -- a race between two simultaneous registrations would slip past
-    // an application-level check
-    uniqueIndex('devices_one_active_per_user')
-      .on(table.userEmail)
-      .where(sql`revoked_at is null`),
-  ],
-)
 
 export const courses = pgTable(
   'courses',
@@ -197,8 +174,6 @@ export const attendanceRecords = pgTable(
       .references(() => users.email),
     markedAt: timestamp('marked_at', { withTimezone: true }).notNull().defaultNow(),
     source: attendanceSourceEnum('source').notNull(),
-    deviceId: uuid('device_id').references(() => devices.id),
-    fingerprint: varchar('fingerprint'),
     ip: varchar('ip'),
     userAgent: text('user_agent'),
     lat: doublePrecision('lat'),
@@ -214,7 +189,6 @@ export const attendanceRecords = pgTable(
       table.sessionId,
       table.studentEmail,
     ),
-    index('attendance_fingerprint_idx').on(table.sessionId, table.fingerprint),
   ],
 )
 
@@ -252,18 +226,6 @@ export const reviewRequests = pgTable(
     uniqueIndex('review_one_per_student_per_session').on(table.sessionId, table.studentEmail),
   ],
 )
-
-export const deviceRebindRequests = pgTable('device_rebind_requests', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  userEmail: varchar('user_email')
-    .notNull()
-    .references(() => users.email, { onDelete: 'cascade' }),
-  reason: text('reason').notNull(),
-  status: requestStatusEnum('status').notNull().default('pending'),
-  reviewedByEmail: varchar('reviewed_by_email').references(() => users.email),
-  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-})
 
 // Role changes, manual attendance overrides, display-token issuance and
 // redemption. Deliberately not cascaded from users: the record of what someone

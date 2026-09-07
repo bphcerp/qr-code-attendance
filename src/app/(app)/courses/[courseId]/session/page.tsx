@@ -8,7 +8,6 @@ import SessionControl from '@/components/SessionControl'
 import CourseRosterUpload from '@/components/CourseRosterUpload'
 import AttendanceHistory, { type HistoryRow } from '@/components/AttendanceHistory'
 import CourseFacultyManager from '@/components/CourseFacultyManager'
-import DeviceRelease from '@/components/DeviceRelease'
 import AttendanceReport from '@/components/AttendanceReport'
 import { getCourseAttendanceReport } from '@/lib/attendanceReport'
 
@@ -120,7 +119,6 @@ export default async function SessionPage({
         }))}
         canManage={me?.role === 'admin' || isOwner}
       />
-      <DeviceRelease courseId={course.id} />
       <AttendanceHistory rows={history} />
       <AttendanceReport courseCode={course.code} report={report} />
     </div>

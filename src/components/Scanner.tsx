@@ -9,7 +9,6 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { BrowserQRCodeReader, type IScannerControls } from '@zxing/browser'
-import { deviceFingerprint } from '@/lib/fingerprint'
 import { Button } from '@/components/ui/button'
 import Spinner from '@/components/ui/spinner'
 import { CODE_LENGTH } from '@/lib/tokenFormat'
@@ -40,8 +39,6 @@ const failureLabels: Record<string, string> = {
   session_closed: 'This class has stopped taking attendance.',
   not_enrolled: 'You are not on the roster for this course.',
   already_marked: 'You are already marked present for this class.',
-  device_mismatch:
-    'This is not the phone registered to your account. Ask your instructor to approve a device change.',
   bad_request: 'Something was missing from the scan. Try again.',
   unauthenticated: 'Your sign-in expired. Sign in again.',
 }
@@ -117,7 +114,6 @@ export default function Scanner({
           body: JSON.stringify({
             sessionId,
             token: raw,
-            fingerprint: await deviceFingerprint(),
             lat: geo.lat,
             lng: geo.lng,
             accuracy: geo.accuracy,

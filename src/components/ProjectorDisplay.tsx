@@ -193,9 +193,10 @@ export default function ProjectorDisplay({
           <p className="text-sm font-semibold uppercase tracking-[0.24em] text-neutral-500">
             Read this out
           </p>
-          {/* Wraps on a narrow phone rather than shrinking -- this is meant to be
-              readable at arm's length while the lecturer is talking. */}
-          <p className="mt-3 break-all font-mono text-7xl font-semibold leading-none tracking-[0.1em] text-black sm:text-8xl">
+          {/* Always one line -- the six-character code is read out at arm's
+              length, so it scales with the viewport to fit rather than wrapping,
+              capped so it doesn't get absurd on a wide projector. */}
+          <p className="mt-3 whitespace-nowrap font-mono text-[clamp(2.25rem,17vw,6rem)] font-semibold leading-none tracking-[0.1em] text-black">
             {payload.code}
           </p>
           <p

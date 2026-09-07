@@ -8,6 +8,13 @@
       "when": 1788721912665,
       "tag": "0000_baseline",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788755779493,
+      "tag": "0001_remove_device_binding",
+      "breakpoints": true
     }
   ]
 }

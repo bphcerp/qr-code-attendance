@@ -75,16 +75,15 @@ test('a student can mark attendance in a live session and see it after it ends',
     fetch(`${baseURL}/api/attendance/mark`, {
       method: 'POST',
       headers: { cookie, 'content-type': 'application/json' },
-      body: JSON.stringify({ sessionId: session.id, token, fingerprint: 'e2e-handset', geoDenied: true }),
+      body: JSON.stringify({ sessionId: session.id, token, geoDenied: true }),
     })
 
   const first = await mark(studentCookie)
   expect(first.status).toBe(200)
 
-  // Second scan by the same student, keeping the device cookie the first issued,
-  // is the duplicate case -> 409 already_marked.
-  const deviceCookie = first.headers.get('set-cookie')?.split(';')[0] ?? ''
-  const repeat = await mark(`${studentCookie}; ${deviceCookie}`)
+  // A second scan by the same student is the duplicate case -> 409 already_marked,
+  // enforced by the one-mark-per-student-per-session unique index.
+  const repeat = await mark(studentCookie)
   expect(repeat.status).toBe(409)
 
   // End the class; attendance percentages count finished sessions only.

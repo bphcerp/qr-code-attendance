@@ -1,14 +1,12 @@
 'use server'
 
-import { and, eq, sql } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { db } from '@/db'
-import { auditLog, courseFaculty, courseRoster, courses, enrollments, users } from '@/db/schema'
+import { auditLog, courseFaculty, courses, users } from '@/db/schema'
 import { isAllowedEmail } from '@/lib/auth'
-import { requireRole, teachesCourse } from '@/lib/guards'
-import { releaseActiveDevice } from '@/lib/device'
-import { normalizeStudentId, studentIdFromEmail } from '@/lib/studentId'
+import { requireRole } from '@/lib/guards'
 
 export type CreateCourseState = {
   error?: string
@@ -237,101 +235,4 @@ export async function removeCourseFaculty(
   revalidatePath(`/courses/${courseId}/session`)
   revalidatePath('/')
   return { notice: `${email} no longer teaches this course.` }
-}
-
-export type DeviceReleaseState = {
-  error?: string
-  notice?: string
-}
-
-// Releasing a device is any instructor's call, not only the owner's -- the
-// person running the class is the one who needs to unstick a student mid-lecture.
-// Admins can do it too, since they can already reach every course. Returns null
-// (a generic error, matching requireCourseOwner) rather than confirming the
-// course exists to someone who cannot see it.
-async function requireCourseTeacher(courseId: string) {
-  const { email, role } = await requireRole('faculty', 'admin')
-  if (role === 'admin') return { email, role }
-
-  const [course] = await db
-    .select({ facultyEmail: courses.facultyEmail })
-    .from(courses)
-    .where(eq(courses.id, courseId))
-  if (!course) return null
-  if (course.facultyEmail.toLowerCase() === email) return { email, role }
-  if (await teachesCourse(courseId, email)) return { email, role }
-  return null
-}
-
-// Resolves the typed email or student ID to a student connected to this course,
-// so an instructor can only release devices for their own students. An email is
-// accepted when the student is enrolled or on the uploaded roster; a bare ID is
-// matched against the course's enrolled accounts.
-async function resolveCourseStudent(courseId: string, input: string): Promise<string | null> {
-  if (input.includes('@')) {
-    const candidate = input.toLowerCase()
-
-    const [enrolled] = await db
-      .select({ email: enrollments.studentEmail })
-      .from(enrollments)
-      .where(and(eq(enrollments.courseId, courseId), eq(enrollments.studentEmail, candidate)))
-    if (enrolled) return enrolled.email
-
-    const id = studentIdFromEmail(candidate)
-    const [onRoster] = await db
-      .select({ studentId: courseRoster.studentId })
-      .from(courseRoster)
-      .where(
-        and(
-          eq(courseRoster.courseId, courseId),
-          sql`lower(replace(${courseRoster.studentId}, ' ', '')) = ${id}`,
-        ),
-      )
-    return onRoster ? candidate : null
-  }
-
-  const id = normalizeStudentId(input)
-  if (!id) return null
-  const enrolled = await db
-    .select({ email: enrollments.studentEmail })
-    .from(enrollments)
-    .where(eq(enrollments.courseId, courseId))
-  const match = enrolled.find((row) => studentIdFromEmail(row.email) === id)
-  return match?.email ?? null
-}
-
-// Frees a student's device binding so they can register a new phone. This is the
-// only path anywhere that releases a binding -- without it, a new phone, cleared
-// browser data, or a single failed scan locked a student out permanently, and
-// the only recovery was hand-written SQL against production mid-lecture.
-export async function releaseStudentDevice(
-  _previousState: DeviceReleaseState,
-  formData: FormData,
-): Promise<DeviceReleaseState> {
-  const courseId = readText(formData, 'courseId')
-  const student = readText(formData, 'student')
-
-  if (!isUuid(courseId)) return { error: 'That course does not exist.' }
-  const actor = await requireCourseTeacher(courseId)
-  if (!actor) return { error: 'You cannot manage devices for this course.' }
-
-  if (!student) return { error: 'Enter the student’s email or ID.' }
-
-  const studentEmail = await resolveCourseStudent(courseId, student)
-  if (!studentEmail) return { error: 'No student on this course matches that email or ID.' }
-
-  const released = await releaseActiveDevice(studentEmail)
-  if (!released) {
-    return { notice: `${studentEmail} has no active device — they can register on their next mark.` }
-  }
-
-  await db.insert(auditLog).values({
-    actorEmail: actor.email,
-    action: 'device.release',
-    subject: studentEmail,
-    detail: { courseId },
-  })
-
-  revalidatePath(`/courses/${courseId}/session`)
-  return { notice: `Released ${studentEmail}’s device. They can register a new one on their next mark.` }
 }

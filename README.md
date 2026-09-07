@@ -155,14 +155,13 @@ Two rules shadcn will fight, so override deliberately:
 
 Roster add-by-search was removed; Excel and CSV upload are the only ways to
 add students. Still missing: faculty review dashboard, review queue, manual
-override, student review requests, `/device` and the rebind
-approval flow, and every admin screen except `/admin/faculty` -- role
-changes above faculty still go through `scripts/seedAdmin.ts`. A retention
-job to purge `lat`/`lng`/`accuracy`/`ip` from `attendanceRecords` after one
-semester is also missing.
+override, student review requests, and every admin screen except
+`/admin/faculty` -- role changes above faculty still go through
+`scripts/seedAdmin.ts`. A retention job to purge `lat`/`lng`/`accuracy`/`ip`
+from `attendanceRecords` after one semester is also missing.
 
 Two smaller gaps: the scanner exposes a zoom slider only where
 `getUserMedia` reports the capability, with no centre-crop fallback for
 browsers that don't; and the nav is a plain header rather than a bottom tab
 bar -- two items don't justify one yet, but it should become one once
-`/device` and the review screens land.
+the review screens land.
