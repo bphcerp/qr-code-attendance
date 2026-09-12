@@ -1,0 +1,27 @@
+# Kept deliberately tight: the builder stage does COPY . ., so anything listed
+# here is something that must not end up in a layer on the deploy box.
+
+# .env.local and .env.supabase hold live credentials -- the Supabase password,
+# the Google client secret, AUTH_SECRET. No !.env.example exception on purpose:
+# the image reads its config from the environment, so it never needs the file.
+.env*
+
+node_modules
+.next
+.git
+.gitignore
+
+# local embedded-postgres data dir, and it is large
+.pgdata
+
+.vercel
+.playwright-mcp
+*.tsbuildinfo
+
+# not read inside the image
+Dockerfile
+.dockerignore
+docker-compose.yml
+README.md
+CONTRIBUTING.md
+docs

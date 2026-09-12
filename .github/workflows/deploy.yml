@@ -1,0 +1,23 @@
+name: Deploy
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: dadu-home-runner
+    steps:
+      - name: Pull latest code
+        # The first clone is manual -- this only ever pulls.
+        working-directory: /opt/services/team-dadu/qr-code-attendance
+        env:
+          GIT_SSH_COMMAND: "ssh -i /home/team-dadu/.ssh/id_ed25519_org -o StrictHostKeyChecking=no"
+        run: git pull origin master
+
+      - name: Rebuild and restart
+        working-directory: /opt/services/team-dadu/qr-code-attendance
+        run: |
+          docker compose build --no-cache dadu-attendance
+          docker compose up -d dadu-attendance

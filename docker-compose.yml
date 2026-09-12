@@ -1,0 +1,20 @@
+services:
+  dadu-attendance:
+    build: .
+    # PORT is interpolated from the .env sitting next to this file, the same way
+    # the other bphcerp compose files do it. It must be set there (compose fails
+    # on an empty ${PORT}); 4601 is the chosen one -- not 9090, which is dadu-web's
+    # -- and it must match whatever the reverse proxy is pointed at.
+    ports:
+      - "${PORT}:${PORT}"
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - HOST=0.0.0.0
+      - PORT=${PORT}
+# No volumes on purpose. Nothing in the app writes to disk: roster uploads are
+# parsed in the browser (src/lib/parseRosterFile.ts reads the File straight into
+# xlsx) and POSTed as JSON, so there is no upload directory to persist, and the
+# database is Supabase.
