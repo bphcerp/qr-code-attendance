@@ -29,7 +29,9 @@ good way to lose an afternoon.
 
 ## Deploying
 
-Production is Vercel (`master` auto-deploys) against a Supabase project.
+Production is moving to the department box (a self-hosted GitHub Actions runner
+that builds the `Dockerfile` and runs `docker-compose.yml`); Vercel still works
+and is described below too. Both target the same Supabase project.
 `.env.local` points at the embedded local Postgres; `.env.supabase` points at
 production, and nothing reads it automatically. That separation is
 deliberate, but it's also what caused every production outage so far, so
@@ -48,6 +50,31 @@ migrations cannot run over that connection -- they need `DIRECT_URL` pointed
 at the `postgres` role on the session pooler (port 5432). Pointing
 `DIRECT_URL` at the runtime role instead fails on
 `CREATE SCHEMA IF NOT EXISTS "drizzle"` before it does anything else.
+
+### Deploying with Docker (the DADU box)
+
+Pushing to `master` fires `.github/workflows/deploy.yml`, which pulls on the
+box then `docker compose build --no-cache dadu-attendance && docker compose up
+-d`. The database is still Supabase; the container dials out to it.
+
+Config is a `.env` next to `docker-compose.yml` -- gitignored, never baked into
+the image, and it must exist before the first build (compose refuses an empty
+`${PORT}`). `.env.example` documents every key. Two only matter off Vercel:
+`AUTH_TRUST_HOST=true` (Auth.js rejects the host otherwise and no one can sign
+in) and `PORT` (compose uses it for both the published port and `next start`).
+The app also needs real HTTPS -- `/scan` uses the camera and geolocation, which
+browsers block outside a secure context.
+
+Migrations run from the container entrypoint (`deployMigrate.ts --force`, then
+`next start`); `--force` is needed because `VERCEL_ENV` is never set off Vercel.
+A failed migration takes the container down rather than serving against the
+wrong schema, which `restart: unless-stopped` turns into a visible crash loop.
+
+**Because of the baseline squash below, run the reconciliation once against the
+production database _before_ the first container deploy** -- otherwise the
+entrypoint's migrate step tries to re-create tables that already exist and the
+container will crash-loop. After the ledger is reconciled, the entrypoint is a
+no-op on an up-to-date schema and only applies genuinely new migrations.
 
 ### The migrations were squashed into one baseline
 
