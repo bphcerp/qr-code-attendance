@@ -15,6 +15,13 @@
       "when": 1788755779493,
       "tag": "0001_remove_device_binding",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789238217752,
+      "tag": "0002_add_roster_match_key",
+      "breakpoints": true
     }
   ]
 }

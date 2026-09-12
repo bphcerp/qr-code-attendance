@@ -95,11 +95,19 @@ export const courseRoster = pgTable(
       .references(() => courses.id, { onDelete: 'cascade' }),
     studentId: varchar('student_id').notNull(),
     studentName: varchar('student_name').notNull(),
+    // The account-matching key (the eight-digit email core, see studentId.ts),
+    // stored at upload rather than derived in SQL on every read. Enrolment in
+    // both directions -- accounts matched at upload, and a student's own row
+    // resolved when they sign in -- is now one indexed equality instead of a
+    // per-navigation full scan with a fragile lower(replace(...)) expression,
+    // which is what fell over first when 600 students opened the app at once.
+    matchKey: varchar('match_key'),
     uploadedAt: timestamp('uploaded_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     primaryKey({ columns: [table.courseId, table.studentId] }),
     index('course_roster_course_idx').on(table.courseId),
+    index('course_roster_match_key_idx').on(table.matchKey),
   ],
 )
 

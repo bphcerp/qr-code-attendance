@@ -1,22 +1,23 @@
-import { sql } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { db } from '@/db'
 import { courseRoster, enrollments } from '@/db/schema'
-import { studentIdFromEmail } from '@/lib/studentId'
+import { emailCoreFromEmail } from '@/lib/studentId'
 
 export async function syncRosterEnrollment(email: string) {
-  const id = studentIdFromEmail(email)
-  if (!id) return
+  const key = emailCoreFromEmail(email)
+  if (!key) return
 
-  // Filter in SQL on the student's own ID rather than pulling every roster row
-  // on campus into Node and matching in JavaScript. This runs in the app layout
-  // on every navigation for every signed-in user, so a full scan here is what
-  // falls over first when 600 students open the app at the start of a class. The
-  // `lower(replace(...))` expression mirrors normalizeStudentId and matches the
-  // one already used in courseRoster.removeRosterStudent.
+  // Resolve this student against every roster by the stored match key -- one
+  // indexed equality on course_roster.match_key. This runs in the app layout on
+  // every navigation for every signed-in user, so the old full scan with a
+  // lower(replace(...)) expression is exactly what fell over first when 600
+  // students opened the app at the start of a class. The key is the eight-digit
+  // email core (studentId.ts), which is what a roster's ERP id or username was
+  // reduced to at upload.
   const matches = await db
     .select({ courseId: courseRoster.courseId })
     .from(courseRoster)
-    .where(sql`lower(replace(${courseRoster.studentId}, ' ', '')) = ${id}`)
+    .where(eq(courseRoster.matchKey, key))
   if (!matches.length) return
 
   await db

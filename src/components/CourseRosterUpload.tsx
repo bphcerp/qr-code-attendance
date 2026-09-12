@@ -36,7 +36,26 @@ export default function CourseRosterUpload({
       const body = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(errorLabel(body.error))
       setRoster(rows)
-      setMessage(`${body.count} students imported. The new roster replaces the previous one.`)
+      const imported: number = body.imported ?? rows.length
+      const enrolled: number = body.enrolled ?? 0
+      const unmatched: string[] = body.unmatched ?? []
+      if (enrolled === 0) {
+        // The whole point of the outage: a total mismatch used to read as
+        // success. Say plainly that nobody was linked to an account and show a
+        // few of the ids so the wrong column is obvious before class.
+        const sample = unmatched.slice(0, 3).join(', ')
+        setError(
+          `${imported} rows imported but 0 matched a student account — no one will see this course yet. ` +
+            `Check the sheet has an ID (e.g. 41120261453) or email column.${sample ? ` Unmatched: ${sample}…` : ''}`,
+        )
+      } else if (unmatched.length) {
+        setMessage(
+          `${imported} imported · ${enrolled} enrolled now · ${unmatched.length} not on the system yet ` +
+            `(they'll be added the first time they sign in).`,
+        )
+      } else {
+        setMessage(`${imported} imported · all ${enrolled} enrolled. The new roster replaces the previous one.`)
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not import the roster.')
     } finally {
@@ -93,7 +112,7 @@ export default function CourseRosterUpload({
         <input
           ref={inputRef}
           type="file"
-          accept=".xls,.xlsx,.csv,.tsv"
+          accept=".xls,.xlsx,.xlsm,.xlsb,.csv,.tsv"
           className="sr-only"
           onChange={(event) => {
             const file = event.target.files?.[0]
