@@ -14,7 +14,42 @@ services:
       - NODE_ENV=production
       - HOST=0.0.0.0
       - PORT=${PORT}
-# No volumes on purpose. Nothing in the app writes to disk: roster uploads are
-# parsed in the browser (src/lib/parseRosterFile.ts reads the File straight into
-# xlsx) and POSTed as JSON, so there is no upload directory to persist, and the
-# database is Supabase.
+    # required: false is the whole trick. The prod command names the service
+    # (`docker compose up -d dadu-attendance`) with the `dev` profile inactive, so
+    # `db` is neither started nor required -- prod keeps talking to Supabase. Only
+    # `docker compose --profile dev up` activates `db`, and then the app waits for
+    # it to be healthy first. (If an older compose ignores required:false and pulls
+    # db into prod, delete this depends_on and let the entrypoint's migrate retry
+    # under restart: unless-stopped instead.)
+    depends_on:
+      db:
+        condition: service_healthy
+        required: false
+
+  # Local Postgres for `docker compose --profile dev up`. Not started in prod --
+  # the server points DATABASE_URL/DIRECT_URL at Supabase. This exists so the
+  # stack runs locally without Supabase, and as the target the app will move to
+  # when the local-db switch happens. Mirrors the postgres service in
+  # bphcerp/Office-Task-Tracker.
+  db:
+    image: postgres:16-alpine
+    profiles: ["dev"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-attendance}
+    # Host port 55432 matches the embedded-postgres dev port (scripts/localDb.ts
+    # and the README), so host-side tools -- `npm run dev`, drizzle-kit studio --
+    # reach it at localhost:55432. Inside the compose network the app uses db:5432.
+    ports:
+      - "${DB_PORT:-55432}:5432"
+    volumes:
+      - attendance-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-attendance}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  attendance-db-data:
