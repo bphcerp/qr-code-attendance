@@ -14,26 +14,18 @@ services:
       - NODE_ENV=production
       - HOST=0.0.0.0
       - PORT=${PORT}
-    # required: false is the whole trick. The prod command names the service
-    # (`docker compose up -d dadu-attendance`) with the `dev` profile inactive, so
-    # `db` is neither started nor required -- prod keeps talking to Supabase. Only
-    # `docker compose --profile dev up` activates `db`, and then the app waits for
-    # it to be healthy first. (If an older compose ignores required:false and pulls
-    # db into prod, delete this depends_on and let the entrypoint's migrate retry
-    # under restart: unless-stopped instead.)
+    # The app now talks to the local `db` service below, in prod too -- the
+    # server's DATABASE_URL/DIRECT_URL point at db:5432, not Supabase. The prod
+    # deploy command (`docker compose up -d dadu-attendance`) starts `db` as a
+    # normal dependency and waits for it to be healthy before starting the app.
     depends_on:
       db:
         condition: service_healthy
-        required: false
 
-  # Local Postgres for `docker compose --profile dev up`. Not started in prod --
-  # the server points DATABASE_URL/DIRECT_URL at Supabase. This exists so the
-  # stack runs locally without Supabase, and as the target the app will move to
-  # when the local-db switch happens. Mirrors the postgres service in
-  # bphcerp/Office-Task-Tracker.
+  # Local Postgres, used in prod and in `docker compose --profile dev up` alike.
+  # Mirrors the postgres service in bphcerp/Office-Task-Tracker.
   db:
     image: postgres:16-alpine
-    profiles: ["dev"]
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
