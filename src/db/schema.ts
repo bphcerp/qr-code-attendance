@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm'
 import {
   pgTable,
   pgEnum,
@@ -142,7 +143,17 @@ export const classSessions = pgTable(
     roomLat: doublePrecision('room_lat'),
     roomLng: doublePrecision('room_lng'),
   },
-  (table) => [index('class_sessions_course_idx').on(table.courseId, table.startedAt)],
+  (table) => [
+    index('class_sessions_course_idx').on(table.courseId, table.startedAt),
+    // At most one open session per course. The route checks this first for a
+    // clean error, but a double-click or two co-instructors starting at once
+    // race past a read-then-insert -- two live sessions would each hand out
+    // valid tokens for the same room and split the class. The partial unique
+    // index is the actual guarantee; the insert catches its violation.
+    uniqueIndex('class_sessions_one_open_per_course')
+      .on(table.courseId)
+      .where(sql`${table.endedAt} is null`),
+  ],
 )
 
 export const displayTokens = pgTable(

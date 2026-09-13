@@ -7,7 +7,7 @@ import { clientIp, userAgent } from '@/lib/request'
 import { fetchSession, assertSessionOpen } from '@/lib/displayToken'
 import { verifyToken } from '@/lib/token'
 import { haversineMetres, OUTLIER_METRES, IMPRECISE_ACCURACY_METRES } from '@/lib/geo'
-import { emailCore, emailCoreFromEmail } from '@/lib/studentId'
+import { emailCoreFromEmail } from '@/lib/studentId'
 import { finiteOrNull } from '@/lib/num'
 
 type Body = {
@@ -53,13 +53,12 @@ export async function POST(req: Request) {
       // core (studentId.ts) lets first-time students attend without asking the
       // professor to re-import them -- and works whether the sheet held the ERP
       // id, the campus username, or the full email.
-      const roster = await db
-        .select({ studentId: courseRoster.studentId })
-        .from(courseRoster)
-        .where(eq(courseRoster.courseId, session.courseId))
       const key = emailCoreFromEmail(email)
-      const matchesRoster = roster.some((student) => emailCore(student.studentId) === key)
-      if (!matchesRoster) throw new HttpError(403, 'not_enrolled')
+      const [match] = await db
+        .select({ courseId: courseRoster.courseId })
+        .from(courseRoster)
+        .where(and(eq(courseRoster.courseId, session.courseId), eq(courseRoster.matchKey, key)))
+      if (!match) throw new HttpError(403, 'not_enrolled')
       await db
         .insert(enrollments)
         .values({ courseId: session.courseId, studentEmail: email })

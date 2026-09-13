@@ -22,6 +22,13 @@
       "when": 1789238217752,
       "tag": "0002_add_roster_match_key",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789294466751,
+      "tag": "0003_one_open_session_per_course",
+      "breakpoints": true
     }
   ]
 }

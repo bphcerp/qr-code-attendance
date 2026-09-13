@@ -106,17 +106,33 @@ This is a one-time step for the squash. Ordinary future migrations
 ## Verification
 
 ```
+npm run verify                                                # roster + roster-file + mark + report + session, in order
+```
+
+or individually:
+
+```
 npx tsx --env-file=.env.local scripts/verifyMark.ts
 npx tsx --env-file=.env.local scripts/verifyRoster.ts
+npx tsx --env-file=.env.local scripts/verifyRosterFile.ts     # the real parser on real-shaped fixtures (build:fixtures first)
 npx tsx --env-file=.env.local scripts/verifyReport.ts
+npx tsx --env-file=.env.local scripts/verifySession.ts        # one open session per course
 npx tsx --env-file=.env.local scripts/verifyDisplay.ts        # needs dev server on 3001
 npx tsx --env-file=.env.local scripts/verifyApp.ts            # needs dev server on 3001
 npx tsx --env-file=.env.local scripts/verifyFacultyAccess.ts  # needs dev server on 3001
 ```
 
-105 checks across the six. There's no unit-test framework and none is
-wanted here -- these scripts exercise the real database and real HTTP, which
-is where every bug found so far actually lived.
+There's no unit-test framework and none is wanted here -- these scripts exercise
+the real database and real HTTP, which is where every bug found so far actually
+lived. `verifyRosterFile` runs the actual Excel/CSV parser against fixtures shaped
+like a real ERP export (`npm run build:fixtures` regenerates them); it exists
+because the SWE E112 outage was a roster that parsed fine on clean ids but
+enrolled nobody on the real sheet.
+
+For the 500-600 student scale, `npm run test:load` (default 600) seeds a full
+theatre and drives the concurrent enrol/sync/mark bursts a class start produces,
+asserting correctness and printing latency. Before a first lecture, work through
+[docs/go-live.md](docs/go-live.md) against production.
 
 There is also a Playwright deploy-readiness suite:
 
