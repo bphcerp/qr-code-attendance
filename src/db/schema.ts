@@ -164,8 +164,9 @@ export const displayTokens = pgTable(
       .notNull()
       .references(() => classSessions.id, { onDelete: 'cascade' }),
     tokenHash: varchar('token_hash').notNull().unique(),
-    // null until first redemption, then pinned. A leaked link is already bound
-    // to the podium PC by the time a student could try it.
+    // No longer written -- display links are not pinned to a device any more
+    // (see finalizeRedemption). Left in place rather than dropped, since a
+    // column drop is exactly what caused the 13 Aug outage.
     pinnedIp: varchar('pinned_ip'),
     issuedByEmail: varchar('issued_by_email')
       .notNull()

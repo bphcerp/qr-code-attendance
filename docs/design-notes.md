@@ -77,6 +77,13 @@ runbook in the README deploy section.
   access control: anyone holding that link can mark from anywhere.
 - **Display liveness comes from `lastPingAt` in Postgres**, not from open
   connections. Serverless instances share no memory.
+- **Display links are not pinned to a device.** They used to lock to the
+  first IP that opened them. Behind the DADU box's reverse proxy the podium
+  PC's apparent address can change mid-lecture, and a pin that trips blanks
+  the QR for the whole theatre -- a worse failure than the leak it guarded
+  against. A leaked link is still limited by its 4-hour TTL, by revocation,
+  and by the geo flags on each mark. `display_tokens.pinned_ip` is left in
+  place, unwritten.
 - **The projector link is never printed on screen, even to the faculty who
   generated it.** Once issued it's copy/open-only. Geo doesn't help against
   a leaked link -- a student who has it can open the live QR from their own

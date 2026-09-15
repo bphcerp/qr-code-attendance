@@ -71,29 +71,28 @@ export async function fetchDisplayToken(sessionId: string, token: string) {
 // closed session always short-circuits before a token's validity is ever
 // reported. Don't reorder that: it's what keeps a caller from learning a
 // session is still open by how a bad token fails, or vice versa.
-export function assertTokenValid(row: DisplayTokenRow | undefined, ip: string | null) {
+export function assertTokenValid(row: DisplayTokenRow | undefined) {
   if (!row) throw new HttpError(403, 'display_token_invalid')
   if (row.revokedAt) throw new HttpError(403, 'display_token_revoked')
   if (row.expiresAt.getTime() < Date.now()) throw new HttpError(403, 'display_token_expired')
-  if (row.pinnedIp && row.pinnedIp !== ip) {
-    throw new HttpError(403, 'display_token_wrong_device')
-  }
   return row
 }
 
-// The IP pin is set on first redemption rather than at issue time, because the
-// podium PC's address isn't known when the lecturer generates the link on their
-// laptop. That leaves one gap worth being honest about: whoever redeems first
-// wins. If a student somehow redeemed before the projector did, the projector
-// would fail loudly and the lecturer would notice immediately -- which is why
-// this returns a distinct error rather than silently reissuing.
+// A display link used to pin to the first IP that opened it. It no longer does:
+// behind the DADU box's reverse proxy the podium PC's apparent address can
+// change mid-lecture (IPv4/IPv6, DHCP, however the proxy fills x-forwarded-for),
+// and a pin that trips then blanks the QR for the whole theatre. A leaked link
+// is still bounded by its TTL, by revocation, and by the geo flags on each mark.
+//
+// The first poll is still recorded once in the audit log, keyed off lastPingAt
+// being unset rather than off the old pin column.
 export async function finalizeRedemption(row: DisplayTokenRow, ip: string | null) {
   await db
     .update(displayTokens)
-    .set({ lastPingAt: new Date(), ...(row.pinnedIp ? {} : { pinnedIp: ip }) })
+    .set({ lastPingAt: new Date() })
     .where(eq(displayTokens.id, row.id))
 
-  if (!row.pinnedIp) {
+  if (!row.lastPingAt) {
     await db.insert(auditLog).values({
       actorEmail: row.issuedByEmail,
       action: 'display_token.redeem',

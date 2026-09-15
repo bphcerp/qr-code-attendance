@@ -1,6 +1,6 @@
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { db } from '../src/db'
-import { users, courses, classSessions, displayTokens } from '../src/db/schema'
+import { users, courses, classSessions, displayTokens, auditLog } from '../src/db/schema'
 import { newSessionSecret } from '../src/lib/token'
 import { issueDisplayToken, activeDisplayCount, revokeDisplayTokens } from '../src/lib/displayToken'
 
@@ -54,13 +54,17 @@ async function main() {
   check('response carries serverTime', Boolean(first.body.serverTime))
   check('response carries nextRotationAt', Boolean(first.body.nextRotationAt))
 
-  console.log('\nIP pinning')
-  const [pinned] = await db.select({ pinnedIp: displayTokens.pinnedIp }).from(displayTokens).where(eq(displayTokens.sessionId, session.id))
-  check('first redemption pins the IP', pinned.pinnedIp === '10.0.0.1', String(pinned.pinnedIp))
+  console.log('\nNo device pin')
   const other = await get(url(token), '203.0.113.9')
-  check('same token from another IP is rejected', other.status === 403, JSON.stringify(other.body))
-  check('rejection names the reason', other.body.error === 'display_token_wrong_device', String(other.body.error))
+  check('same token from another IP still works', other.status === 200, JSON.stringify(other.body))
   check('original IP still works', (await get(url(token), '10.0.0.1')).status === 200)
+  const [row] = await db.select({ pinnedIp: displayTokens.pinnedIp }).from(displayTokens).where(eq(displayTokens.sessionId, session.id))
+  check('no IP is recorded as a pin', row.pinnedIp === null, String(row.pinnedIp))
+  const redeems = await db
+    .select({ id: auditLog.id })
+    .from(auditLog)
+    .where(and(eq(auditLog.action, 'display_token.redeem'), eq(auditLog.subject, session.id)))
+  check('first poll is audited exactly once', redeems.length === 1, String(redeems.length))
 
   console.log('\nLiveness counting')
   check('one live display counted', (await activeDisplayCount(session.id)) === 1)

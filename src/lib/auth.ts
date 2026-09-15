@@ -3,6 +3,7 @@ import Google from 'next-auth/providers/google'
 import { eq } from 'drizzle-orm'
 import { db } from '@/db'
 import { users } from '@/db/schema'
+import { syncRosterEnrollment } from '@/lib/syncRosterEnrollment'
 
 const allowedDomains = (process.env.ALLOWED_EMAIL_DOMAINS ?? '')
   .split(',')
@@ -39,11 +40,18 @@ export function isAllowedEmail(email: string | null | undefined) {
 // access to an address that has not signed in creates the row with the local
 // part of the email standing in for a name, and this is the first moment a
 // real one exists to replace it with.
+//
+// Roster enrolment is resolved here too, before the first page renders. The
+// (app) layout also syncs, but Next renders a layout and its page in parallel,
+// so on a student's very first visit the home page read their enrolments before
+// the layout had written them -- "No courses yet" until a refresh, which is what
+// a first-time student saw walking into class.
 export async function recordSignIn(email: string, name: string | null | undefined) {
   await db
     .insert(users)
     .values({ email, name: name ?? email, campus: email.split('@')[1] })
     .onConflictDoUpdate({ target: users.email, set: { name: name ?? email } })
+  await syncRosterEnrollment(email)
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({

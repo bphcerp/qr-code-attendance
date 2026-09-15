@@ -49,8 +49,8 @@ real network live, so rehearse there:
    which browsers only allow over real HTTPS. Confirm on the actual lecture-hall
    Wi-Fi, not just your desk.
 5. **The projector.** Open the display link on the podium PC and confirm the QR
-   renders and rotates. The link pins to the first device that opens it, so open
-   it on the podium, not your laptop.
+   renders and rotates. The link is not tied to a device, so it can be reopened
+   anywhere -- which also means it should not be shared.
 
 ## If the enrolled count is wrong
 
@@ -70,5 +70,3 @@ The roster's ID column must reduce to the student's email core (see
   migrations (currently `0002` match_key, `0003` one-open-session) — safe only if
   production's ledger is reconciled to the baseline. Confirm before the first
   deploy after a squash (`npm run db:reconcile:prod`).
-- Off Vercel, the display-token IP pin trusts `x-forwarded-for`. Confirm the DADU
-  box's reverse proxy sets it to the real client, or the pin is meaningless.

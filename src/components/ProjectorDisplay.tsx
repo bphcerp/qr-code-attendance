@@ -23,7 +23,6 @@ const errorLabels: Record<string, string> = {
   display_token_invalid: 'This display link is not valid.',
   display_token_revoked: 'This display link was revoked.',
   display_token_expired: 'This display link has expired.',
-  display_token_wrong_device: 'This link is already in use on another device.',
   session_closed: 'The session has ended.',
   not_found: 'Session not found.',
 }
