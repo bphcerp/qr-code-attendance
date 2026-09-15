@@ -1,0 +1,59 @@
+name: Clear attendance history
+
+# Deletes every class session on the box's compose Postgres, and with them every
+# attendance mark, flag, display link and review request (all cascade from
+# class_sessions). Courses, rosters, enrolments, teaching teams, users and the
+# audit log are kept. Runs scripts/clearAttendanceHistory.ts inside the live app
+# container, where DIRECT_URL is already db:5432.
+#
+#   1. mode=dry-run                                   -> counts only
+#   2. mode=apply, confirm=DELETE ALL ATTENDANCE      -> pg_dump, then delete
+#
+# apply never runs without a non-empty dump in ~/attendance-backups on the box.
+# To put the history back from one:
+#
+#   docker compose exec -T db sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --data-only \
+#     -t class_sessions -t display_tokens -t attendance_records -t attendance_flags -t review_requests' \
+#     < ~/attendance-backups/before-clear-<stamp>.dump
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options: [dry-run, apply]
+        default: dry-run
+      confirm:
+        description: Type DELETE ALL ATTENDANCE to apply
+        required: false
+
+jobs:
+  clear:
+    runs-on: dadu-attendance
+    defaults:
+      run:
+        working-directory: /opt/services/team-dadu/qr-code-attendance
+    steps:
+      - name: Confirm
+        if: inputs.mode == 'apply' && inputs.confirm != 'DELETE ALL ATTENDANCE'
+        run: |
+          echo "::error::apply needs confirm set to exactly: DELETE ALL ATTENDANCE"
+          exit 1
+
+      - name: Back up the database
+        if: inputs.mode == 'apply'
+        run: |
+          DIR="$HOME/attendance-backups"
+          mkdir -p "$DIR" && chmod 700 "$DIR"
+          FILE="$DIR/before-clear-$(date -u +%Y%m%dT%H%M%SZ).dump"
+          docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$FILE"
+          test -s "$FILE"
+          ls -l "$FILE"
+
+      - name: Clear
+        env:
+          ACTOR: ${{ github.actor }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          docker compose exec -T -e ACTOR="$ACTOR" -e GITHUB_RUN_ID="$RUN_ID" dadu-attendance \
+            node_modules/.bin/tsx scripts/clearAttendanceHistory.ts ${{ inputs.mode == 'apply' && '--apply' || '' }}
