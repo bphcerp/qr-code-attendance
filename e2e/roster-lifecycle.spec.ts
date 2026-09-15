@@ -60,8 +60,10 @@ test('faculty uploads the ERP roster and the UI reports students enrolled', asyn
   await page.setInputFiles('input[type=file]', ERP_FIXTURE)
 
   // The feedback reports enrolment, not just the imported row count -- the fix
-  // for the silent failure. And the ERP id shows in the roster table.
+  // for the silent failure. And the ERP id shows in the roster table, once
+  // the collapsed list is opened.
   await expect(page.getByText(/enrolled/i)).toBeVisible()
+  await page.getByText('Students in roster').click()
   await expect(page.getByText(ERP_ID)).toBeVisible()
 })
 
