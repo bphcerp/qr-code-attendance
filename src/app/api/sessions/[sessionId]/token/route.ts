@@ -37,7 +37,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ sessionI
       fetchDisplayToken(sessionId, dt),
     ])
     const session = assertSessionOpen(sessionRow)
-    const validToken = assertTokenValid(tokenRow, ip)
+    const validToken = assertTokenValid(tokenRow)
     await finalizeRedemption(validToken, ip)
 
     const counter = currentCounter(session.startedAt, session.rotationSeconds)
