@@ -2,7 +2,7 @@ import { errorResponse, requireCourseAccess, HttpError } from '@/lib/guards'
 import { normalizeStudentId } from '@/lib/studentId'
 import { removeRosterStudent, replaceCourseRoster } from '@/lib/courseRoster'
 
-type IncomingRow = { studentId?: unknown; studentName?: unknown }
+type IncomingRow = { studentId?: unknown; studentName?: unknown; email?: unknown }
 
 export async function POST(req: Request, { params }: { params: Promise<{ courseId: string }> }) {
   try {
@@ -17,18 +17,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ courseI
     const rows = body.rows.map((row) => {
       const studentId = typeof row.studentId === 'string' ? row.studentId.trim() : ''
       const studentName = typeof row.studentName === 'string' ? row.studentName.trim() : ''
+      const email = typeof row.email === 'string' ? row.email.trim().toLowerCase() : ''
       const key = normalizeStudentId(studentId)
-      if (!studentId || !studentName || !key || studentId.length > 80 || studentName.length > 160) {
+      if (!studentId || !studentName || !key || studentId.length > 80 || studentName.length > 160 || email.length > 254) {
         throw new HttpError(400, 'invalid_roster')
       }
       if (seen.has(key)) throw new HttpError(400, 'duplicate_student_id')
       seen.add(key)
-      return { studentId, studentName }
+      return email ? { studentId, studentName, email } : { studentId, studentName }
     })
 
-    await replaceCourseRoster(courseId, rows)
+    const result = await replaceCourseRoster(courseId, rows)
 
-    return Response.json({ ok: true, count: rows.length })
+    return Response.json({ ok: true, ...result })
   } catch (err) {
     return errorResponse(err)
   }

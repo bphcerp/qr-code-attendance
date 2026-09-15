@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm'
 import {
   pgTable,
   pgEnum,
@@ -95,11 +96,19 @@ export const courseRoster = pgTable(
       .references(() => courses.id, { onDelete: 'cascade' }),
     studentId: varchar('student_id').notNull(),
     studentName: varchar('student_name').notNull(),
+    // The account-matching key (the eight-digit email core, see studentId.ts),
+    // stored at upload rather than derived in SQL on every read. Enrolment in
+    // both directions -- accounts matched at upload, and a student's own row
+    // resolved when they sign in -- is now one indexed equality instead of a
+    // per-navigation full scan with a fragile lower(replace(...)) expression,
+    // which is what fell over first when 600 students opened the app at once.
+    matchKey: varchar('match_key'),
     uploadedAt: timestamp('uploaded_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     primaryKey({ columns: [table.courseId, table.studentId] }),
     index('course_roster_course_idx').on(table.courseId),
+    index('course_roster_match_key_idx').on(table.matchKey),
   ],
 )
 
@@ -134,7 +143,17 @@ export const classSessions = pgTable(
     roomLat: doublePrecision('room_lat'),
     roomLng: doublePrecision('room_lng'),
   },
-  (table) => [index('class_sessions_course_idx').on(table.courseId, table.startedAt)],
+  (table) => [
+    index('class_sessions_course_idx').on(table.courseId, table.startedAt),
+    // At most one open session per course. The route checks this first for a
+    // clean error, but a double-click or two co-instructors starting at once
+    // race past a read-then-insert -- two live sessions would each hand out
+    // valid tokens for the same room and split the class. The partial unique
+    // index is the actual guarantee; the insert catches its violation.
+    uniqueIndex('class_sessions_one_open_per_course')
+      .on(table.courseId)
+      .where(sql`${table.endedAt} is null`),
+  ],
 )
 
 export const displayTokens = pgTable(

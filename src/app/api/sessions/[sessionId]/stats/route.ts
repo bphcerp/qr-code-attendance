@@ -10,7 +10,7 @@ import {
 } from '@/db/schema'
 import { errorResponse, requireCourseAccess, requireRole, HttpError } from '@/lib/guards'
 import { activeDisplayCount } from '@/lib/displayToken'
-import { studentIdFromEmail } from '@/lib/studentId'
+import { emailCore, emailCoreFromEmail, studentIdFromEmail } from '@/lib/studentId'
 
 export const dynamic = 'force-dynamic'
 
@@ -72,11 +72,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ session
     // The roster rows already carry attendance source, so derive the summary
     // here instead of making Postgres scan attendance_records a second time.
     const attendanceByStudent = new Map(
-      attendance.map((record) => [studentIdFromEmail(record.email), record]),
+      attendance.map((record) => [emailCoreFromEmail(record.email), record]),
     )
     const visibleStudents = roster.length
       ? roster.map((student) => {
-          const record = attendanceByStudent.get(studentIdFromEmail(student.studentId))
+          const record = attendanceByStudent.get(emailCore(student.studentId))
           return {
             studentId: student.studentId,
             email: record?.email ?? null,
@@ -86,7 +86,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ session
           }
         })
       : enrolledStudents.map((student) => {
-          const record = attendanceByStudent.get(studentIdFromEmail(student.email))
+          const record = attendanceByStudent.get(emailCoreFromEmail(student.email))
           return {
             studentId: studentIdFromEmail(student.email),
             email: student.email,

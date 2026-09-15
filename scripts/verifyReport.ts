@@ -21,9 +21,13 @@ function check(label: string, condition: boolean) {
 async function main() {
   const stamp = Date.now()
   const professor = `report.prof.${stamp}@hyderabad.bits-pilani.ac.in`
-  const attendee = `f${stamp}a@hyderabad.bits-pilani.ac.in`
-  const absentee = `f${stamp}b@hyderabad.bits-pilani.ac.in`
-  const stranger = `f${stamp}c@hyderabad.bits-pilani.ac.in`
+  // Distinct eight-digit email cores (studentId.ts), the way real BITS ids
+  // differ -- not one stamp with a trailing letter, which would collapse onto a
+  // single core and merge the students.
+  const core = String(stamp).slice(-7)
+  const attendee = `f${core}1@hyderabad.bits-pilani.ac.in`
+  const absentee = `f${core}2@hyderabad.bits-pilani.ac.in`
+  const stranger = `f${core}3@hyderabad.bits-pilani.ac.in`
 
   await db.insert(users).values([
     { email: professor, name: 'Report Test Professor', role: 'faculty' },
@@ -53,9 +57,11 @@ async function main() {
       { sessionId: live.id, studentEmail: absentee, source: 'qr' },
     ])
 
+    // Roster stored as ERP ids (411 + core), the real export form, to prove the
+    // grid merges them with attendance that is keyed by email.
     await db.insert(courseRoster).values([
-      { courseId: course.id, studentId: `f${stamp}a`, studentName: 'Attendee Student' },
-      { courseId: course.id, studentId: `f${stamp}b`, studentName: 'Absentee Student' },
+      { courseId: course.id, studentId: `411${core}1`, studentName: 'Attendee Student' },
+      { courseId: course.id, studentId: `411${core}2`, studentName: 'Absentee Student' },
     ])
 
     const report = await getCourseAttendanceReport(course.id)
@@ -67,7 +73,7 @@ async function main() {
         report.sessions[1].id === second.id,
     )
 
-    const present = report.students.find((student) => student.studentId === `f${stamp}a`)
+    const present = report.students.find((student) => student.studentId === `411${core}1`)
     check(
       'a student marked in one class of two reads present then absent',
       Boolean(present) &&
@@ -77,7 +83,7 @@ async function main() {
         present!.email === attendee,
     )
 
-    const missing = report.students.find((student) => student.studentId === `f${stamp}b`)
+    const missing = report.students.find((student) => student.studentId === `411${core}2`)
     check(
       'a roster student who never marked is absent in every column',
       Boolean(missing) && missing!.present === 0 && missing!.marks.every((mark) => mark === null),

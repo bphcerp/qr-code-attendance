@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "class_sessions_one_open_per_course" ON "class_sessions" USING btree ("course_id") WHERE "class_sessions"."ended_at" is null;

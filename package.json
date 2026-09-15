@@ -15,6 +15,9 @@
     "db:studio": "drizzle-kit studio",
     "seed:admin": "tsx --env-file=.env.local scripts/seedAdmin.ts",
     "seed:students": "tsx --env-file=.env.local scripts/seedStudents.ts",
+    "build:fixtures": "tsx scripts/buildFixtures.ts",
+    "test:load": "tsx --env-file=.env.local scripts/loadTest.ts",
+    "verify": "npm run build:fixtures && tsx --env-file=.env.local scripts/verifyRoster.ts && tsx --env-file=.env.local scripts/verifyRosterFile.ts && tsx --env-file=.env.local scripts/verifyMark.ts && tsx --env-file=.env.local scripts/verifyReport.ts && tsx --env-file=.env.local scripts/verifySession.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {

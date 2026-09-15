@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx'
 
-export type RosterRow = { studentId: string; studentName: string }
+export type RosterRow = { studentId: string; studentName: string; email?: string }
 
 const idHeaders = new Set([
   'id',
@@ -15,6 +15,12 @@ const idHeaders = new Set([
 ])
 
 const nameHeaders = new Set(['name', 'studentname', 'fullname', 'student'])
+
+// When the sheet carries the campus email, match on that rather than on
+// whatever the id column happens to be -- it is the one identifier that maps to
+// an account without guessing. Exports from the ERP do not always include it,
+// which is why the id column still has to work on its own.
+const emailHeaders = new Set(['email', 'emailid', 'emailaddress', 'mail', 'emailidno'])
 
 export async function parseRosterFile(file: File): Promise<RosterRow[]> {
   const extension = file.name.split('.').pop()?.toLowerCase()
@@ -31,23 +37,28 @@ function normalizeRoster(rows: string[][]) {
 
   const first = nonEmpty[0].map(normalizeHeader)
   const idIndex = first.findIndex((header) => idHeaders.has(header))
+  const emailIndex = first.findIndex((header) => emailHeaders.has(header))
   const nameIndex = first.findIndex((header) => nameHeaders.has(header))
-  const hasHeader = idIndex >= 0 && nameIndex >= 0
-  const resolvedIdIndex = hasHeader ? idIndex : 0
-  const resolvedNameIndex = hasHeader ? nameIndex : 1
+  // A header row is one we can read: a name column plus something to identify
+  // the student by (an id or an email). Otherwise fall back to the old
+  // positional guess (first column id, second name) for a bare two-column list.
+  const hasHeader = nameIndex >= 0 && (idIndex >= 0 || emailIndex >= 0)
+  const resolvedIdIndex = idIndex >= 0 ? idIndex : emailIndex >= 0 ? emailIndex : 0
+  const resolvedNameIndex = nameIndex >= 0 ? nameIndex : 1
   const data = hasHeader ? nonEmpty.slice(1) : nonEmpty
   const seen = new Set<string>()
   const result: RosterRow[] = []
 
   for (const row of data) {
     const studentId = row[resolvedIdIndex]?.trim() ?? ''
-    const studentName = row[resolvedNameIndex]?.trim() ?? ''
+    const studentName = cleanName(row[resolvedNameIndex]?.trim() ?? '')
+    const email = hasHeader && emailIndex >= 0 ? row[emailIndex]?.trim() : undefined
     const key = studentId.toLowerCase().replace(/\s+/g, '')
     if (!studentId && !studentName) continue
     if (!studentId || !studentName) throw new Error('Every roster row needs both an ID number and a name.')
     if (seen.has(key)) throw new Error(`Duplicate student ID: ${studentId}`)
     seen.add(key)
-    result.push({ studentId, studentName })
+    result.push(email ? { studentId, studentName, email } : { studentId, studentName })
   }
 
   if (!result.length) throw new Error('No student rows were found. Use ID and Name columns.')
@@ -57,6 +68,13 @@ function normalizeRoster(rows: string[][]) {
 
 function normalizeHeader(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+// The ERP export prefixes every name with an empty salutation, so a cell reads
+// ".,AAHI KHANDELWAL". Drop leading punctuation/separators so the roster and
+// the attendance report show the actual name.
+function cleanName(value: string) {
+  return value.replace(/^[\s.,;:|-]+/, '').trim()
 }
 
 function parseDelimited(text: string, delimiter: string) {

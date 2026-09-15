@@ -1,7 +1,7 @@
 import { and, asc, eq, isNotNull } from 'drizzle-orm'
 import { db } from '@/db'
 import { attendanceRecords, classSessions, courseRoster, enrollments, users } from '@/db/schema'
-import { normalizeStudentId, studentIdFromEmail } from '@/lib/studentId'
+import { emailCore, emailCoreFromEmail, studentIdFromEmail } from '@/lib/studentId'
 
 export type ReportSession = {
   id: string
@@ -72,7 +72,8 @@ export async function getCourseAttendanceReport(courseId: string): Promise<Atten
   const columnOf = new Map(sessions.map((session, index) => [session.id, index]))
 
   // Attendance is keyed by email, the uploaded roster by student id, so the two
-  // meet on the id derived from the local part of the address.
+  // meet on the eight-digit email core (studentId.ts) -- the one key an ERP id,
+  // a username and a full email all reduce to.
   const marksByStudent = new Map<
     string,
     { email: string; name: string; byColumn: Map<number, string> }
@@ -80,7 +81,7 @@ export async function getCourseAttendanceReport(courseId: string): Promise<Atten
   for (const record of attendance) {
     const column = columnOf.get(record.sessionId)
     if (column === undefined) continue
-    const id = studentIdFromEmail(record.email)
+    const id = emailCoreFromEmail(record.email)
     let entry = marksByStudent.get(id)
     if (!entry) {
       entry = { email: record.email, name: record.name, byColumn: new Map() }
@@ -112,11 +113,11 @@ export async function getCourseAttendanceReport(courseId: string): Promise<Atten
   // uploaded roster when there is one, otherwise the accounts enrolled.
   if (roster.length) {
     for (const student of roster) {
-      addStudent(normalizeStudentId(student.studentId), student.studentId, student.name, null, true)
+      addStudent(emailCore(student.studentId), student.studentId, student.name, null, true)
     }
   } else {
     for (const student of enrolledStudents) {
-      addStudent(studentIdFromEmail(student.email), studentIdFromEmail(student.email), student.name, student.email, true)
+      addStudent(emailCoreFromEmail(student.email), studentIdFromEmail(student.email), student.name, student.email, true)
     }
   }
 
