@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { resolve } from 'node:path'
+import { readFile } from 'node:fs/promises'
 import { eq } from 'drizzle-orm'
 import { db } from '../src/db'
 import { users, courses, courseFaculty, classSessions, enrollments, courseRoster } from '../src/db/schema'
@@ -60,8 +61,10 @@ test('faculty uploads the ERP roster and the UI reports students enrolled', asyn
   await page.setInputFiles('input[type=file]', ERP_FIXTURE)
 
   // The feedback reports enrolment, not just the imported row count -- the fix
-  // for the silent failure. And the ERP id shows in the roster table.
+  // for the silent failure. And the ERP id shows in the roster table, once
+  // the collapsed list is opened.
   await expect(page.getByText(/enrolled/i)).toBeVisible()
+  await page.getByText('Students in roster').click()
   await expect(page.getByText(ERP_ID)).toBeVisible()
 })
 
@@ -124,4 +127,19 @@ test('the student marks attendance, it shows in stats, and lands on their home a
   await page.goto('/')
   const card = page.locator('a', { hasText: ctx.code })
   await expect(card.getByText('100%')).toBeVisible()
+})
+
+test('the faculty export carries the time each student marked', async ({ context, page }) => {
+  await signInAs(context, ctx.prof, 'faculty')
+  await page.goto(`/courses/${ctx.courseId}/session`)
+
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Download CSV' }).click(),
+  ])
+  const csv = (await readFile(await download.path(), 'utf8')).replace(/^﻿/, '')
+  const [header, ...rows] = csv.split('\r\n')
+
+  expect(header).toMatch(/,\d{4}-\d{2}-\d{2} \d{2}:\d{2},/)
+  expect(rows.find((row) => row.startsWith(ERP_ID))).toMatch(/,P \d{2}:\d{2},/)
 })

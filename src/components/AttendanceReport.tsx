@@ -28,6 +28,20 @@ const csvDateFormatter = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Asia/Kolkata',
 })
 
+// h23 rather than hour12: false, which some engines render as 24:05 just
+// after midnight.
+const csvTimeFormatter = new Intl.DateTimeFormat('en-GB', {
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+  timeZone: 'Asia/Kolkata',
+})
+
+function csvDateTime(iso: string) {
+  const date = new Date(iso)
+  return `${csvDateFormatter.format(date)} ${csvTimeFormatter.format(date)}`
+}
+
 function percentage(present: number, total: number) {
   return total ? Math.round((present / total) * 100) : 0
 }
@@ -70,7 +84,7 @@ export default function AttendanceReport({
       [
         'Student ID',
         'Name',
-        ...sessions.map((session) => csvDateFormatter.format(new Date(session.startedAt))),
+        ...sessions.map((session) => csvDateTime(session.startedAt)),
         'Present',
         'Classes',
         'Attendance %',
@@ -78,7 +92,9 @@ export default function AttendanceReport({
       ...students.map((student) => [
         student.studentId,
         student.onRoster ? student.name : `${student.name} (not on roster)`,
-        ...student.marks.map((mark) => (mark ? 'P' : 'A')),
+        // "P 09:05" rather than a bare time, so a present cell still reads as
+        // present and COUNTIF(range, "P*") keeps working.
+        ...student.marks.map((mark) => (mark ? `P ${csvTimeFormatter.format(new Date(mark))}` : 'A')),
         String(student.present),
         String(sessions.length),
         String(percentage(student.present, sessions.length)),

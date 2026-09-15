@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { FileSpreadsheet, Trash2, Upload } from 'lucide-react'
+import { ChevronDown, FileSpreadsheet, Trash2, Upload } from 'lucide-react'
 import { parseRosterFile, type RosterRow } from '@/lib/parseRosterFile'
 import { normalizeStudentId } from '@/lib/studentId'
 import { Button } from '@/components/ui/button'
@@ -134,11 +134,17 @@ export default function CourseRosterUpload({
         </p>
       )}
 
+      {/* Closed by default: a 600-row roster pushed the history and report a
+          long way down the page, and the count above is usually all that's needed. */}
       {roster.length > 0 && (
-        <div className="mt-6 overflow-hidden rounded-md border border-border">
-          <div className="border-b border-border bg-muted/30 px-4 py-3">
+        <details className="group mt-6 overflow-hidden rounded-md border border-border">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 border-border bg-muted/30 px-4 py-3 group-open:border-b [&::-webkit-details-marker]:hidden">
             <h3 className="text-sm font-semibold">Students in roster</h3>
-          </div>
+            <span className="flex items-center gap-2 text-muted-foreground">
+              <span className="meta">{roster.length}</span>
+              <ChevronDown size={16} className="transition-transform duration-150 group-open:rotate-180" />
+            </span>
+          </summary>
           <div className="max-h-96 overflow-y-auto">
             <table className="w-full text-left text-sm">
               <thead className="sticky top-0 border-b border-border bg-card text-xs text-muted-foreground">
@@ -172,7 +178,7 @@ export default function CourseRosterUpload({
               </tbody>
             </table>
           </div>
-        </div>
+        </details>
       )}
     </section>
   )
