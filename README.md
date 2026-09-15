@@ -55,7 +55,14 @@ at the `postgres` role on the session pooler (port 5432). Pointing
 
 Pushing to `master` fires `.github/workflows/deploy.yml`, which pulls on the
 box then `docker compose build --no-cache dadu-attendance && docker compose up
--d`. The database is still Supabase; the container dials out to it.
+-d`. The database is the compose `db` service on the box, no longer Supabase.
+
+The Supabase data was carried over once with `scripts/importFromSupabase.ts`,
+run on the box through the `Import from Supabase` workflow (the steps are in
+its header). It is column-aware because Supabase is still on the pre-squash
+schema, it backfills `course_roster.match_key` (Supabase never had it, and
+without it no roster matches anyone), and it is safe to re-run -- rows already
+on the box win.
 
 Config is a `.env` next to `docker-compose.yml` -- gitignored, never baked into
 the image, and it must exist before the first build (compose refuses an empty

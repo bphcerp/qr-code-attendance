@@ -1,0 +1,66 @@
+name: Import from Supabase
+
+# One-time copy of the Supabase data into the box's compose Postgres, by running
+# scripts/importFromSupabase.ts inside the live app container (where DIRECT_URL
+# is already db:5432).
+#
+# The Supabase URL carries the postgres password, and dispatch inputs are
+# readable by anyone who can see this repo's runs, so it never travels in the
+# clear: `keygen` makes an RSA key that stays on the box and prints its public
+# half, the URL is encrypted to that locally, and only the box can decrypt it.
+# `apply` deletes the key afterwards, so the ciphertext left in the run history
+# is dead.
+#
+#   1. mode=keygen                       -> copy the public key from the log
+#   2. printf %s "$URL" | openssl pkeyutl -encrypt -pubin -inkey pub.pem \
+#        -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 | base64 -w0
+#   3. mode=dry-run, source=<that>       -> counts only
+#   4. mode=apply,   source=<that>       -> writes, then removes the key
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options: [keygen, dry-run, apply]
+        default: dry-run
+      source:
+        description: Supabase session-pooler URL, encrypted to the box key (base64)
+        required: false
+
+jobs:
+  import:
+    runs-on: dadu-home-runner
+    defaults:
+      run:
+        working-directory: /opt/services/team-dadu/qr-code-attendance
+    steps:
+      - name: Box key
+        if: inputs.mode == 'keygen'
+        run: |
+          KEY="$HOME/.attendance-import/key.pem"
+          mkdir -p "$(dirname "$KEY")" && chmod 700 "$(dirname "$KEY")"
+          [ -f "$KEY" ] || openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out "$KEY"
+          chmod 600 "$KEY"
+          openssl pkey -in "$KEY" -pubout
+
+      - name: Container state
+        if: inputs.mode != 'keygen'
+        run: |
+          docker compose ps
+          docker compose logs --tail 15 dadu-attendance
+
+      - name: Import
+        if: inputs.mode != 'keygen'
+        env:
+          CIPHER: ${{ inputs.source }}
+        run: |
+          KEY="$HOME/.attendance-import/key.pem"
+          SOURCE_DATABASE_URL="$(printf %s "$CIPHER" | base64 -d | openssl pkeyutl -decrypt -inkey "$KEY" -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256)"
+          echo "::add-mask::$SOURCE_DATABASE_URL"
+          docker compose exec -T -e SOURCE_DATABASE_URL="$SOURCE_DATABASE_URL" dadu-attendance \
+            node_modules/.bin/tsx scripts/importFromSupabase.ts ${{ inputs.mode == 'apply' && '--apply' || '' }}
+
+      - name: Drop the box key
+        if: inputs.mode == 'apply' && success()
+        run: rm -f "$HOME/.attendance-import/key.pem"
