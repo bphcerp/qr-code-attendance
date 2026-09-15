@@ -30,7 +30,7 @@ on:
 
 jobs:
   import:
-    runs-on: dadu-home-runner
+    runs-on: dadu-attendance
     defaults:
       run:
         working-directory: /opt/services/team-dadu/qr-code-attendance
